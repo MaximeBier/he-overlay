@@ -1,0 +1,16 @@
+{
+  "extends": "@tsconfig/svelte/tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    // "svelte" porte la déclaration ambiante du module `*.svelte` : notre clé
+    // `types` écrase celle de @tsconfig/svelte, il faut donc la réinscrire.
+    "types": ["svelte", "vite/client", "vitest/globals", "node"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true
+  },
+  "include": ["src/**/*.ts", "src/**/*.svelte", "vite.config.ts"]
+}

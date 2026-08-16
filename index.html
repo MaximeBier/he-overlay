@@ -1,0 +1,87 @@
+<!doctype html>
+<!--
+  Page d'accueil. Volontairement statique : aucun script, donc aucun bundle,
+  et elle n'entre dans aucune des deux applications (spec §5.1).
+  Contenu provisoire — la tâche 28 la reprendra avec la documentation.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HE Overlay</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --ink: #16181d;
+        --muted: #5c6370;
+        --bg: #ffffff;
+        --line: #dcdfe4;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --ink: #e6e8ec;
+          --muted: #9aa1ae;
+          --bg: #16181d;
+          --line: #2c3038;
+        }
+      }
+      body {
+        margin: 0;
+        padding: 4rem 1.5rem;
+        background: var(--bg);
+        color: var(--ink);
+        font: 16px/1.6 system-ui, sans-serif;
+      }
+      main {
+        max-width: 34rem;
+        margin: 0 auto;
+      }
+      h1 {
+        margin: 0 0 0.25rem;
+        font-size: 1.75rem;
+      }
+      p {
+        color: var(--muted);
+        margin: 0 0 2rem;
+      }
+      a.card {
+        display: block;
+        padding: 1rem 1.25rem;
+        margin-bottom: 0.75rem;
+        border: 1px solid var(--line);
+        border-radius: 0.5rem;
+        color: inherit;
+        text-decoration: none;
+      }
+      a.card:hover {
+        border-color: var(--muted);
+      }
+      a.card strong {
+        display: block;
+      }
+      a.card span {
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>HE Overlay</h1>
+      <p>Show your Wooting keyboard's analog key travel live in OBS. Nothing to install.</p>
+
+      <a class="card" href="/capture.html">
+        <strong>Open the capture page →</strong>
+        <span>Reads the keyboard, drives the overlay, and builds the OBS URL. Chrome only.</span>
+      </a>
+
+      <a class="card" href="/overlay.html">
+        <strong>Overlay page</strong>
+        <span
+          >Meant to be added as an OBS browser source, not opened directly — it stays blank
+          until the capture page feeds it.</span
+        >
+      </a>
+    </main>
+  </body>
+</html>
