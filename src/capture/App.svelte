@@ -10,6 +10,7 @@
   } from '../transport/obs';
   import { createCaptureSession } from './session';
   import { loadSettings, saveSettings, overlayUrl } from './settings';
+  import { createOverlayRegistry } from './overlays';
   import StatusBar from './StatusBar.svelte';
   import type { DecodeAnomaly } from '../keyboard/decode';
   import type { FrameKey } from '../protocol/messages';
@@ -19,6 +20,14 @@
   let obsStatus = $state<ObsStatus>('idle');
   let keys = $state<FrameKey[]>([]);
   let rate = $state(0);
+  let overlayCount = $state(0);
+
+  const overlays = createOverlayRegistry();
+
+  /** A synchronous reading, not a timer: allowed on the capture page. */
+  function refreshOverlays() {
+    overlayCount = overlays.count(performance.now());
+  }
 
   // An empty number field binds to null, and `ws://localhost:null` throws
   // inside the WebSocket constructor. The displayed URL has to survive that
@@ -31,7 +40,18 @@
       url: `ws://localhost:${untrack(() => port)}`,
       password: untrack(() => settings.password),
       onStatus: (s) => (obsStatus = s),
-      onMessage: () => {},
+      onMessage: (message) => {
+        // The capture page discards config and frame: those are its own
+        // messages (spec §6).
+        if (message.t === 'hello' || message.t === 'beat') {
+          overlays.seen(message.id, performance.now());
+          refreshOverlays();
+        }
+        if (message.t === 'bye') {
+          overlays.forget(message.id);
+          refreshOverlays();
+        }
+      },
     });
   }
 
@@ -75,6 +95,10 @@
     onKeys: (k) => {
       keys = k;
       rate = session.rate;
+      // Expiry is computed on read, so an overlay that went away only stops
+      // being counted once something asks. Without this it would linger until
+      // another overlay beats — and if it was the only one, forever.
+      refreshOverlays();
     },
     onAnomaly: warnOnce,
   });
@@ -92,7 +116,7 @@
   obs.connect();
 </script>
 
-<StatusBar keyboard={keyboardStatus} obs={obsStatus} {rate} overlays={0} />
+<StatusBar keyboard={keyboardStatus} obs={obsStatus} {rate} overlays={overlayCount} />
 
 <main>
   <h1>HE Overlay — Capture</h1>

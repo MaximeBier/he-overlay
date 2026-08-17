@@ -102,7 +102,7 @@ describe('createObsClient', () => {
   it('sends nothing until it is identified', () => {
     const { client, socket } = setup();
     client.connect();
-    client.broadcast({ v: 1, t: 'hello' });
+    client.broadcast({ v: 1, t: 'hello', id: 'test' });
 
     expect(socket().sent).toHaveLength(0);
   });
@@ -115,12 +115,12 @@ describe('createObsClient', () => {
 
     socket().receive({
       op: 5,
-      d: { eventType: 'CustomEvent', eventData: { heOverlay: { v: 1, t: 'hello' } } },
+      d: { eventType: 'CustomEvent', eventData: { heOverlay: { v: 1, t: 'hello', id: 'test' } } },
     });
     socket().receive({ op: 5, d: { eventType: 'CustomEvent', eventData: { other: true } } });
     socket().receive({ op: 5, d: { eventType: 'CurrentSceneChanged', eventData: {} } });
 
-    expect(messages).toEqual([{ v: 1, t: 'hello' }]);
+    expect(messages).toEqual([{ v: 1, t: 'hello', id: 'test' }]);
   });
 
   it('ensureConnected does not reopen an already identified socket', () => {
@@ -210,7 +210,7 @@ describe('createObsClient', () => {
     expect(client.status).toBe('identified');
     expect(sockets).toHaveLength(2);
 
-    client.broadcast({ v: 1, t: 'hello' });
+    client.broadcast({ v: 1, t: 'hello', id: 'test' });
     expect(socket().sent.length).toBeGreaterThan(0);
   });
 

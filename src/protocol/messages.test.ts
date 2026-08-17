@@ -3,8 +3,8 @@ import { envelope, parseMessage, PROTOCOL_VERSION } from './messages';
 
 describe('protocol envelope', () => {
   it('wraps a message under the heOverlay key', () => {
-    expect(envelope({ v: PROTOCOL_VERSION, t: 'hello' })).toEqual({
-      heOverlay: { v: 1, t: 'hello' },
+    expect(envelope({ v: PROTOCOL_VERSION, t: 'hello', id: 'test' })).toEqual({
+      heOverlay: { v: 1, t: 'hello', id: 'test' },
     });
   });
 
@@ -15,11 +15,29 @@ describe('protocol envelope', () => {
   });
 
   it('ignores an unknown protocol version', () => {
-    expect(parseMessage({ heOverlay: { v: 2, t: 'hello' } })).toBeNull();
+    expect(parseMessage({ heOverlay: { v: 2, t: 'hello', id: 'a' } })).toBeNull();
   });
 
   it('ignores an unknown message type', () => {
     expect(parseMessage({ heOverlay: { v: 1, t: 'yolo' } })).toBeNull();
+  });
+
+  it('carries the overlay id in hello, beat and bye', () => {
+    for (const t of ['hello', 'beat', 'bye'] as const) {
+      expect(parseMessage({ heOverlay: { v: 1, t, id: 'abc' } })).toEqual({ v: 1, t, id: 'abc' });
+    }
+  });
+
+  // Without this the capture page would register an overlay keyed `undefined`:
+  // one phantom listener, counted forever, and never expiring in step with any
+  // real one. The status bar would then claim someone is watching.
+  it('rejects an overlay message with no usable id', () => {
+    expect(parseMessage({ heOverlay: { v: 1, t: 'beat' } })).toBeNull();
+    expect(parseMessage({ heOverlay: { v: 1, t: 'hello', id: 42 } })).toBeNull();
+    expect(parseMessage({ heOverlay: { v: 1, t: 'hello', id: '' } })).toBeNull();
+    // A bye is the one that removes a listener, so an unchecked id here would
+    // let anyone on the same obs-websocket blank the count.
+    expect(parseMessage({ heOverlay: { v: 1, t: 'bye' } })).toBeNull();
   });
 
   // Any obs-websocket client can emit a CustomEvent, so this is a trust

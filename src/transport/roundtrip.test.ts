@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createObsClient } from './obs';
+import { createOverlayRegistry } from '../capture/overlays';
 import type { OverlayMessage } from '../protocol/messages';
 import { FakeSocket } from '../test/fixtures';
 
@@ -47,25 +48,26 @@ class FakeServer {
 }
 
 describe('capture to overlay round trip', () => {
+  function spawn(server: FakeServer, onMessage: (m: OverlayMessage) => void) {
+    return createObsClient({
+      url: 'ws://localhost:4455',
+      password: '',
+      onStatus: () => {},
+      onMessage,
+      socketFactory: () => {
+        const socket = new FakeSocket();
+        server.attach(socket);
+        return socket;
+      },
+    });
+  }
+
   it('delivers a frame broadcast by the capture to the overlay', async () => {
     const server = new FakeServer();
     const received: OverlayMessage[] = [];
 
-    const spawn = (onMessage: (m: OverlayMessage) => void) =>
-      createObsClient({
-        url: 'ws://localhost:4455',
-        password: '',
-        onStatus: () => {},
-        onMessage,
-        socketFactory: () => {
-          const socket = new FakeSocket();
-          server.attach(socket);
-          return socket;
-        },
-      });
-
-    const capture = spawn(() => {});
-    const overlay = spawn((m) => received.push(m));
+    const capture = spawn(server, () => {});
+    const overlay = spawn(server, (m) => received.push(m));
     capture.connect();
     overlay.connect();
 
@@ -75,5 +77,56 @@ describe('capture to overlay round trip', () => {
     capture.broadcast({ v: 1, t: 'frame', k: [[174, 996, 1]] });
 
     expect(received).toEqual([{ v: 1, t: 'frame', k: [[174, 996, 1]] }]);
+  });
+
+  it('lets the capture count two overlays from their heartbeats', async () => {
+    // The relay echoes every broadcast back to its sender, which is the worst
+    // case: nobody knows whether obs-websocket does. If the capture counted
+    // indiscriminately, its own frame would show up as a third listener here.
+    const server = new FakeServer();
+    const registry = createOverlayRegistry();
+
+    const capture = spawn(server, (m) => {
+      if (m.t === 'hello' || m.t === 'beat') registry.seen(m.id, 1000);
+    });
+    const first = spawn(server, () => {});
+    const second = spawn(server, () => {});
+    capture.connect();
+    first.connect();
+    second.connect();
+
+    await vi.waitFor(() => expect(second.status).toBe('identified'));
+
+    first.broadcast({ v: 1, t: 'hello', id: 'first' });
+    second.broadcast({ v: 1, t: 'beat', id: 'second' });
+    capture.broadcast({ v: 1, t: 'frame', k: [] });
+
+    expect(registry.count(1000)).toBe(2);
+  });
+
+  it('counts one overlay across a reload, not two', async () => {
+    // What a reload looks like on the wire: the page says goodbye, comes back
+    // under a new id, and beats again. Ten of those in a row is what adjusting
+    // an overlay looks like, and without the goodbye it read as eleven.
+    const server = new FakeServer();
+    const registry = createOverlayRegistry();
+
+    const capture = spawn(server, (m) => {
+      if (m.t === 'hello' || m.t === 'beat') registry.seen(m.id, 1000);
+      if (m.t === 'bye') registry.forget(m.id);
+    });
+    const overlay = spawn(server, () => {});
+    capture.connect();
+    overlay.connect();
+
+    await vi.waitFor(() => expect(overlay.status).toBe('identified'));
+
+    for (let reload = 0; reload < 10; reload++) {
+      overlay.broadcast({ v: 1, t: 'hello', id: `run-${reload}` });
+      overlay.broadcast({ v: 1, t: 'bye', id: `run-${reload}` });
+    }
+    overlay.broadcast({ v: 1, t: 'hello', id: 'run-final' });
+
+    expect(registry.count(1000)).toBe(1);
   });
 });
