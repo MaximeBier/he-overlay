@@ -48,6 +48,27 @@ curl -sSI https://he-overlay.wardensquad.fr/overlay.html \
 
 Expected: **one** `content-security-policy` line, containing `ws://localhost:*`.
 
+## The OBS password goes in the fragment
+
+The browser source URL looks like this:
+
+```
+https://he-overlay.wardensquad.fr/overlay.html#port=4455&password=<password>
+```
+
+Note the `#`, not `?`. **A fragment is never sent to the server** — that is a
+property of HTTP, not a setting — so the password stays on the streamer's
+machine. A query string, by contrast, arrives verbatim in this host's access
+log: serving the page would mean collecting our users' OBS credentials without
+anyone having decided to.
+
+The query string is still read, so sources configured the old way keep working,
+and the access log is scrubbed of query strings for exactly that reason
+(`log_format no-query`). Both are transitional; the fragment is the real fix.
+
+The password remains visible in the OBS source properties, which is assumed and
+documented — but that is the streamer's own screen, not our server.
+
 ## Run it yourself
 
 Nothing ties the image to our domain:

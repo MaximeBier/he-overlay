@@ -76,6 +76,18 @@ else
   fail "hashed assets are not cached forever"
 fi
 
+# A query string reaches the access log verbatim. Since we host the page, an
+# old-style URL carrying ?password=… would file our users' OBS credentials on
+# our own server. The fragment is the real fix (src/overlay/params.ts); this
+# keeps the log clean for whoever has not migrated yet.
+canary="canary-$$-do-not-log"
+curl -sS -o /dev/null "${BASE}/overlay.html?password=${canary}"
+if docker logs "$cid" 2>&1 | grep -q "$canary"; then
+  fail "the access log records query strings — an OBS password would be stored here"
+else
+  ok "query strings stay out of the access log"
+fi
+
 if [ "$failures" -gt 0 ]; then
   echo "" >&2
   echo "${failures} check(s) failed." >&2
