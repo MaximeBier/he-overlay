@@ -62,3 +62,39 @@ describe('createCaptureSession', () => {
     expect(ensureConnected).toHaveBeenCalled();
   });
 });
+
+describe('createCaptureSession — throughput', () => {
+  it('sacrifices an intermediate variation but never the return to rest', () => {
+    const { session, broadcast } = setup();
+
+    session.handleReport(report(entry(174, 0x50, 400, 0x00)), 0);
+    session.handleReport(report(entry(174, 0x50, 410, 0x00)), 1);
+    session.handleReport(report(entry(174, 0x50, 0, 0x00)), 2);
+
+    expect(broadcast).toHaveBeenCalledTimes(2);
+    expect(broadcast).toHaveBeenLastCalledWith({ v: 1, t: 'frame', k: [[174, 0, 0]] });
+  });
+
+  it('feeds the local preview even with the frames it sacrifices', () => {
+    const { session, keys } = setup();
+
+    session.handleReport(report(entry(174, 0x50, 400, 0x00)), 0);
+    session.handleReport(report(entry(174, 0x50, 410, 0x00)), 1);
+
+    expect(keys).toEqual([[[174, 400, 0]], [[174, 410, 0]]]);
+  });
+
+  it('carries the selected keys only', () => {
+    const broadcast = vi.fn();
+    const session = createCaptureSession({
+      obs: { broadcast, ensureConnected: vi.fn() } as never,
+      onKeys: () => {},
+      onAnomaly: () => {},
+      selectedIds: () => [174],
+    });
+
+    session.handleReport(report(entry(174, 0x50, 100, 0x00), entry(9, 0x1a, 900, 0x01)), 0);
+
+    expect(broadcast).toHaveBeenCalledWith({ v: 1, t: 'frame', k: [[174, 100, 0]] });
+  });
+});
