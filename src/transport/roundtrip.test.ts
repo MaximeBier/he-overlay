@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createObsClient, type SocketLike } from './obs';
+import { createObsClient } from './obs';
 import type { OverlayMessage } from '../protocol/messages';
+import { FakeSocket } from '../test/fixtures';
 
 /**
  * Relays BroadcastCustomEvent between two clients the way obs-websocket does.
@@ -14,44 +15,34 @@ import type { OverlayMessage } from '../protocol/messages';
 class FakeServer {
   private clients: FakeSocket[] = [];
 
+  /** Connects a socket and greets it, the way obs-websocket opens a session. */
   attach(socket: FakeSocket) {
     this.clients.push(socket);
-    socket.server = this;
-    queueMicrotask(() => socket.deliver({ op: 0, d: { rpcVersion: 1 } }));
+    const relay = this;
+    // The shared double records what it is handed; the relay reads it back and
+    // answers, which is what turns two clients into a conversation.
+    const sent = socket.send.bind(socket);
+    socket.send = (data: string) => {
+      sent(data);
+      relay.receive(socket, data);
+    };
+    queueMicrotask(() => socket.receive({ op: 0, d: { rpcVersion: 1 } }));
   }
 
   receive(from: FakeSocket, raw: string) {
     const payload = JSON.parse(raw);
     if (payload.op === 1) {
-      from.deliver({ op: 2, d: { negotiatedRpcVersion: 1 } });
+      from.receive({ op: 2, d: { negotiatedRpcVersion: 1 } });
       return;
     }
     if (payload.op === 6 && payload.d.requestType === 'BroadcastCustomEvent') {
       for (const client of this.clients) {
-        client.deliver({
+        client.receive({
           op: 5,
           d: { eventType: 'CustomEvent', eventData: payload.d.requestData.eventData },
         });
       }
     }
-  }
-}
-
-class FakeSocket implements SocketLike {
-  server: FakeServer | null = null;
-  onopen: (() => void) | null = null;
-  onclose: ((event: { code?: number }) => void) | null = null;
-  onerror: (() => void) | null = null;
-  onmessage: ((event: { data: string }) => void) | null = null;
-
-  send(data: string) {
-    this.server?.receive(this, data);
-  }
-  close() {
-    this.onclose?.({ code: 1000 });
-  }
-  deliver(payload: unknown) {
-    this.onmessage?.({ data: JSON.stringify(payload) });
   }
 }
 
