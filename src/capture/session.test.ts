@@ -1,17 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createCaptureSession } from './session';
 import type { FrameKey } from '../protocol/messages';
-
-function entry(index: number, usage: number, travel: number, low: number): number[] {
-  const field = (travel << 6) | low;
-  return [index, usage, field & 0xff, (field >> 8) & 0xff];
-}
-
-function report(...entries: number[][]): Uint8Array {
-  const buf = new Uint8Array(64);
-  buf.set(entries.flat());
-  return buf;
-}
+import { entry, report } from '../test/fixtures';
 
 function setup() {
   const broadcast = vi.fn();

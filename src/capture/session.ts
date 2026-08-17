@@ -15,7 +15,10 @@ export interface CaptureSession {
 
 export function createCaptureSession(options: CaptureSessionOptions): CaptureSession {
   return {
-    handleReport(data) {
+    handleReport(data, _timestamp) {
+      // `_timestamp` is unused on purpose: it is consumed by the emission rule
+      // of task 9, which spaces frames out from report timestamps rather than
+      // from a timer.
       const { entries, anomalies } = decodeAnalogReport(data);
       for (const anomaly of anomalies) options.onAnomaly(anomaly);
 
