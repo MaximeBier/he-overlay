@@ -1,7 +1,7 @@
 <!--
-  Tout composant porte un bloc `<script lang="ts">`, même vide : sans lui
-  svelte2tsx émet un fichier virtuel en JavaScript, que `svelte-check` refuse
-  de typer, et l'import depuis un `.ts` retombe en `any` implicite.
+  Every component carries a `<script lang="ts">` block, even an empty one:
+  without it svelte2tsx emits a JavaScript virtual file that `svelte-check`
+  refuses to type, and importing it from a `.ts` falls back to implicit `any`.
 -->
 <script lang="ts"></script>
 

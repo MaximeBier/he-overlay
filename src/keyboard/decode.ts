@@ -1,25 +1,25 @@
-/** Page d'usage des interfaces analogiques du Wooting Two HE ARM (spec §3.2). */
+/** Usage page of the Wooting Two HE ARM analog interfaces (spec §3.2). */
 export const ANALOG_USAGE_PAGE = 0xff53;
-/** Taille exacte d'un rapport analogique. Sert de contrôle de cohérence. */
+/** Exact size of an analog report. Used as a sanity check. */
 export const ANALOG_REPORT_BYTES = 64;
 export const ENTRY_BYTES = 4;
-/** 64 / 4 : un rapport plein ne contient aucune sentinelle de fin. */
+/** 64 / 4: a full report carries no end sentinel. */
 export const MAX_ENTRIES = ANALOG_REPORT_BYTES / ENTRY_BYTES;
-/** Course maximale, bornée par construction : un uint16 décalé de 6 bits. */
+/** Maximum travel, bounded by construction: a uint16 shifted right by 6 bits. */
 export const MAX_TRAVEL = 1023;
-/** Bits 1..5 : étiquettes de type d'entrée. Une entrée principale les a tous nuls. */
+/** Bits 1..5: entry type tags. A primary entry has all of them clear. */
 export const LOW_BITS_MASK = 0x3e;
-/** Seuls les bits 3 et 4 ont été observés levés. Le reste est inattendu. */
+/** Only bits 3 and 4 have ever been observed set. Anything else is unexpected. */
 export const KNOWN_LOW_BITS = 0x18;
 
 export interface AnalogEntry {
-  /** Index matriciel : clé d'identification stable d'une touche (spec §3.4). */
+  /** Matrix index: the stable identity of a key (spec §3.4). */
   index: number;
-  /** Usage HID, positionnel : sert à retrouver le libellé, jamais à afficher. */
+  /** HID usage, positional: used to look up a label, never displayed. */
   usage: number;
-  /** Course native de 0 à 1023. */
+  /** Native travel, 0 to 1023. */
   travel: number;
-  /** Verdict d'actuation du firmware : la touche produit une frappe clavier. */
+  /** Firmware actuation verdict: the key produces a keystroke. */
   active: boolean;
 }
 
@@ -45,17 +45,17 @@ export function decodeAnalogReport(data: Uint8Array): DecodeResult {
     const index = data[offset]!;
     const usage = data[offset + 1]!;
 
-    // Fin de liste. Une course nulle ne suffit pas : une touche tout juste
-    // relâchée reste présente avec une valeur nulle (spec §3.1).
+    // End of list. A zero travel is not enough: a key that was just released
+    // stays in the report with a zero value (spec §3.1).
     if (index === 0 && usage === 0) break;
 
     const field = data[offset + 2]! | (data[offset + 3]! << 8);
     const low = field & LOW_BITS_MASK;
 
     if (low !== 0) {
-      // Entrée étiquetée : elle porte l'actuation d'avant arbitrage Rappy
-      // Snappy, jamais celle qu'on affiche. Un bit hors des deux observés est
-      // journalisé plutôt que décodé au jugé.
+      // Tagged entry: it carries the actuation from before Rappy Snappy
+      // arbitration, never the one we display. A bit outside the two observed
+      // ones is logged rather than decoded on a guess.
       if ((low & ~KNOWN_LOW_BITS) !== 0) {
         anomalies.push({ kind: 'unknown-low-bits', index, field });
       }

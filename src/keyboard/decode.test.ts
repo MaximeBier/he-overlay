@@ -2,9 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { decodeAnalogReport, MAX_TRAVEL } from './decode';
 
 /**
- * Construit une entrée de 4 octets.
- * `low` porte les bits 0..5 du champ 16 bits : bit 0 = verdict d'actuation,
- * bits 1..5 = étiquettes de type d'entrée (spec §3.1).
+ * Builds a 4-byte entry.
+ * `low` carries bits 0..5 of the 16-bit field: bit 0 is the actuation verdict,
+ * bits 1..5 are entry type tags (spec §3.1).
  */
 function entry(index: number, usage: number, travel: number, low: number): number[] {
   const field = (travel << 6) | low;
@@ -18,14 +18,14 @@ function report(...entries: number[][]): Uint8Array {
 }
 
 describe('decodeAnalogReport', () => {
-  it('décode une entrée principale : course et actuation', () => {
+  it('decodes a primary entry: travel and actuation', () => {
     const { entries, anomalies } = decodeAnalogReport(report(entry(174, 0x50, 996, 0x01)));
 
     expect(anomalies).toEqual([]);
     expect(entries).toEqual([{ index: 174, usage: 0x50, travel: 996, active: true }]);
   });
 
-  it('rapporte une course nulle sans s’arrêter : une touche relâchée reste présente', () => {
+  it('reports a zero travel without stopping: a released key stays present', () => {
     const { entries } = decodeAnalogReport(
       report(entry(174, 0x50, 0, 0x00), entry(175, 0x51, 500, 0x01)),
     );
@@ -35,7 +35,7 @@ describe('decodeAnalogReport', () => {
     expect(entries[1]?.travel).toBe(500);
   });
 
-  it('s’arrête à la sentinelle : index et usage nuls', () => {
+  it('stops at the sentinel: zero index and zero usage', () => {
     const { entries } = decodeAnalogReport(
       report(entry(174, 0x50, 500, 0x01), [0, 0, 0, 0], entry(9, 0x1a, 700, 0x01)),
     );
@@ -43,8 +43,8 @@ describe('decodeAnalogReport', () => {
     expect(entries).toHaveLength(1);
   });
 
-  // Test 4 de la spec §12.1 — sans ce filtrage l'index n'est pas une clé unique.
-  it('ignore les entrées étiquetées et garde une seule entrée par index', () => {
+  // Test 4 of spec §12.1 — without this filtering the index is not a unique key.
+  it('ignores tagged entries and keeps a single entry per index', () => {
     const { entries } = decodeAnalogReport(
       report(entry(174, 0x04, 996, 0x19), entry(174, 0x50, 996, 0x01)),
     );
@@ -52,8 +52,8 @@ describe('decodeAnalogReport', () => {
     expect(entries).toEqual([{ index: 174, usage: 0x50, travel: 996, active: true }]);
   });
 
-  // Test 5 de la spec §12.1 — un rapport plein n'a pas de sentinelle de fin.
-  it('décode seize entrées sans sentinelle et ne déborde pas du tampon', () => {
+  // Test 5 of spec §12.1 — a full report has no end sentinel.
+  it('decodes sixteen entries without a sentinel and does not overrun the buffer', () => {
     const full = report(
       ...Array.from({ length: 16 }, (_, i) => entry(10 + i, 0x20 + i, 100 + i, 0x01)),
     );
@@ -64,8 +64,8 @@ describe('decodeAnalogReport', () => {
     expect(entries[15]).toEqual({ index: 25, usage: 0x2f, travel: 115, active: true });
   });
 
-  // Test 6 de la spec §12.1 — le maximum réel est 0xFFC1, pas 0xFFFF.
-  it('donne une course pleine de 1023 pour 0xFFC1', () => {
+  // Test 6 of spec §12.1 — the real maximum is 0xFFC1, not 0xFFFF.
+  it('yields a full travel of 1023 for 0xFFC1', () => {
     const buf = new Uint8Array(64);
     buf.set([200, 0x2c, 0xc1, 0xff]);
 
@@ -75,21 +75,21 @@ describe('decodeAnalogReport', () => {
     expect(entries[0]?.active).toBe(true);
   });
 
-  // Test 8 de la spec §12.1 — le masque 0x3E est volontairement large.
-  it('journalise un bit de poids faible non documenté au lieu de le décoder', () => {
+  // Test 8 of spec §12.1 — the 0x3E mask is deliberately wide.
+  it('logs an undocumented low bit instead of decoding it', () => {
     const { entries, anomalies } = decodeAnalogReport(report(entry(30, 0x16, 500, 0x02)));
 
     expect(entries).toEqual([]);
     expect(anomalies).toEqual([{ kind: 'unknown-low-bits', index: 30, field: (500 << 6) | 0x02 }]);
   });
 
-  it('ne journalise pas les bits 3 et 4, qui sont documentés', () => {
+  it('does not log bits 3 and 4, which are documented', () => {
     const { anomalies } = decodeAnalogReport(report(entry(30, 0x04, 500, 0x18)));
 
     expect(anomalies).toEqual([]);
   });
 
-  it('refuse un tampon dont la longueur n’est pas de 64 octets', () => {
+  it('rejects a buffer whose length is not 64 bytes', () => {
     const { entries, anomalies } = decodeAnalogReport(new Uint8Array(14));
 
     expect(entries).toEqual([]);
