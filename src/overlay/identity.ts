@@ -5,6 +5,11 @@ export interface RandomSource {
 
 let counter = 0;
 
+/** Eight base-36 characters, padded — `toString(36)` can come up short. */
+function chunk(): string {
+  return Math.random().toString(36).slice(2).padEnd(8, '0').slice(0, 8);
+}
+
 /**
  * A name the capture page can tell this overlay by (spec §11).
  *
@@ -15,13 +20,17 @@ let counter = 0;
  * Calling it unguarded there throws during setup, and a browser source that
  * fails to mount shows nothing at all for the rest of the stream.
  *
- * The counter is what makes the fallback safe: two overlays mounting in the
- * same millisecond would otherwise be free to draw the same number, and the
- * capture page would count one listener where there are two.
+ * The fallback's uniqueness rests on `performance.timeOrigin` and two draws of
+ * `Math.random`, not on the counter. Two OBS browser sources are two JavaScript
+ * contexts, so both start their counter at zero and it tells them apart in no
+ * way whatsoever — it only separates repeated calls within one page.
+ * `timeOrigin` is the moment its own context was created, which is the one
+ * thing here that genuinely differs between two sources.
  */
 export function newOverlayId(source: RandomSource | undefined = globalThis.crypto): string {
   if (typeof source?.randomUUID === 'function') return source.randomUUID();
 
   counter += 1;
-  return `overlay-${counter}-${Math.random().toString(36).slice(2, 10)}`;
+  const origin = Math.trunc(performance.timeOrigin).toString(36);
+  return `overlay-${origin}-${counter}-${chunk()}${chunk()}`;
 }

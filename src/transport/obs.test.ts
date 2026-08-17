@@ -99,12 +99,23 @@ describe('createObsClient', () => {
     });
   });
 
-  it('sends nothing until it is identified', () => {
+  it('sends nothing until it is identified, and says so', () => {
+    // The return value is what keeps the frame emitter honest: a frame it
+    // believes delivered is a frame it will never send again.
     const { client, socket } = setup();
     client.connect();
-    client.broadcast({ v: 1, t: 'hello', id: 'test' });
 
+    expect(client.broadcast({ v: 1, t: 'hello', id: 'test' })).toBe(false);
     expect(socket().sent).toHaveLength(0);
+  });
+
+  it('confirms a message that went out', () => {
+    const { client, socket } = setup();
+    client.connect();
+    socket().receive(HELLO_NO_AUTH);
+    socket().receive({ op: 2, d: {} });
+
+    expect(client.broadcast({ v: 1, t: 'frame', k: [] })).toBe(true);
   });
 
   it('surfaces incoming CustomEvents and ignores foreign payloads', () => {

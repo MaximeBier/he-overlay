@@ -4,7 +4,7 @@ import type { FrameKey } from '../protocol/messages';
 import { entry, report } from '../test/fixtures';
 
 function setup() {
-  const broadcast = vi.fn();
+  const broadcast = vi.fn(() => true);
   const keys: FrameKey[][] = [];
   const anomalies: unknown[] = [];
   const session = createCaptureSession({
@@ -98,7 +98,7 @@ describe('createCaptureSession — throughput', () => {
   });
 
   it('carries the selected keys only', () => {
-    const broadcast = vi.fn();
+    const broadcast = vi.fn(() => true);
     const session = createCaptureSession({
       obs: { broadcast, ensureConnected: vi.fn() } as never,
       onKeys: () => {},
@@ -109,5 +109,67 @@ describe('createCaptureSession — throughput', () => {
     session.handleReport(report(entry(174, 0x50, 100, 0x00), entry(9, 0x1a, 900, 0x01)), 0);
 
     expect(broadcast).toHaveBeenCalledWith({ v: 1, t: 'frame', k: [[174, 100, 0]] });
+  });
+
+  it('reports the rate of the frame it has just sent, not the previous one', () => {
+    // The preview and the rate are drawn side by side. Reading the rate before
+    // the emission always showed the previous value — zero on the first report.
+    const rates: number[] = [];
+    const session = createCaptureSession({
+      obs: { broadcast: vi.fn(() => true), ensureConnected: vi.fn() } as never,
+      onKeys: () => rates.push(session.rate),
+      onAnomaly: () => {},
+    });
+
+    session.handleReport(report(entry(174, 0x50, 400, 0x00)), 0);
+
+    expect(rates).toEqual([1]);
+  });
+});
+
+describe('createCaptureSession — an overlay announcing itself', () => {
+  it('sends the current state, even though the overlay has changed nothing', () => {
+    const { session, broadcast } = setup();
+    session.handleReport(report(entry(174, 0x50, 400, 0x00)), 0);
+    broadcast.mockClear();
+
+    session.resend(1);
+
+    expect(broadcast).toHaveBeenCalledWith({ v: 1, t: 'frame', k: [[174, 400, 0]] });
+  });
+
+  it('sends a rest frame when nothing is pressed, rather than nothing at all', () => {
+    // A keyboard at rest sends no report, so an overlay opened at that moment
+    // would otherwise stay blank until someone types.
+    const { session, broadcast } = setup();
+
+    session.resend(0);
+
+    expect(broadcast).toHaveBeenCalledWith({ v: 1, t: 'frame', k: [] });
+  });
+});
+
+describe('createCaptureSession — a connection that dropped', () => {
+  it('resends the state the overlay never received', () => {
+    // The milestone 2 review: OBS dies while a key is held, the release frame
+    // is dropped by broadcast, and nothing follows it because nothing is being
+    // touched. The overlay used to keep the half-pressed key for good.
+    let live = true;
+    const broadcast = vi.fn(() => live);
+    const session = createCaptureSession({
+      obs: { broadcast, ensureConnected: vi.fn() } as never,
+      onKeys: () => {},
+      onAnomaly: () => {},
+    });
+
+    session.handleReport(report(entry(174, 0x50, 700, 0x01)), 0);
+    live = false;
+    session.handleReport(report(entry(174, 0x50, 0, 0x00)), 1);
+    live = true;
+    broadcast.mockClear();
+
+    session.handleReport(report(entry(174, 0x50, 0, 0x00)), 2);
+
+    expect(broadcast).toHaveBeenCalledWith({ v: 1, t: 'frame', k: [[174, 0, 0]] });
   });
 });

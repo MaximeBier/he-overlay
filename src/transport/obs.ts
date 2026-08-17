@@ -73,7 +73,13 @@ export interface ObsClient {
    * when the overlay is live and the page is not being looked at (spec §2.2).
    */
   ensureConnected(now: number): void;
-  broadcast(message: OverlayMessage): void;
+  /**
+   * Sends a message, and says whether it actually left. Nothing goes out before
+   * identification, and the caller has to know: an emitter that took a dropped
+   * frame for a delivered one would deduplicate against a state the far end
+   * never received.
+   */
+  broadcast(message: OverlayMessage): boolean;
   close(): void;
   readonly status: ObsStatus;
 }
@@ -257,7 +263,7 @@ export function createObsClient(options: ObsClientOptions): ObsClient {
       openSocket();
     },
     broadcast(message) {
-      if (status !== 'identified') return;
+      if (status !== 'identified') return false;
       // A constant requestId: we never await a reply to BroadcastCustomEvent,
       // and correlating replies we ignore would buy nothing.
       send({
@@ -268,6 +274,7 @@ export function createObsClient(options: ObsClientOptions): ObsClient {
           requestData: { eventData: envelope(message) },
         },
       });
+      return true;
     },
     close() {
       fail('idle');

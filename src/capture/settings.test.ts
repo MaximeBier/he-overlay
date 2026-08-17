@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { loadSettings, saveSettings, overlayUrl, keyboardHint, obsHint } from './settings';
+import {
+  loadSettings,
+  saveSettings,
+  overlayUrl,
+  keyboardHint,
+  obsHint,
+  browserStorage,
+} from './settings';
 import { readOverlayParams } from '../overlay/params';
 
 function memoryStorage(initial: Record<string, string> = {}) {
@@ -28,6 +35,40 @@ describe('credential persistence', () => {
       port: 4455,
       password: '',
     });
+  });
+
+  it('does not throw when the browser refuses to write', () => {
+    // saveSettings runs just before the OBS client is rebuilt. Letting a quota
+    // error out of it aborts the reconnection: the user retypes their password,
+    // nothing happens, and nothing says why.
+    const hostile = {
+      setItem: () => {
+        throw new DOMException('QuotaExceededError');
+      },
+    };
+
+    expect(() => saveSettings(hostile, { port: 4455, password: 'hunter2' })).not.toThrow();
+  });
+
+  it('hands back a usable storage even when local storage is unreachable', () => {
+    // Reading the property itself throws with cookies blocked, and it happens
+    // while the component initialises — the capture page would not mount.
+    const original = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      get() {
+        throw new DOMException('SecurityError');
+      },
+    });
+
+    try {
+      const storage = browserStorage();
+      saveSettings(storage, { port: 4456, password: 'hunter2' });
+
+      expect(loadSettings(storage)).toEqual({ port: 4456, password: 'hunter2' });
+    } finally {
+      if (original) Object.defineProperty(globalThis, 'localStorage', original);
+    }
   });
 
   it('refuses a port no URL could carry', () => {

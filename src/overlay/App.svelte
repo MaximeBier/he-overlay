@@ -54,7 +54,9 @@
   height={HEIGHT}
   viewBox={`0 0 ${keys.length * (WIDTH + GAP)} ${HEIGHT}`}
 >
-  {#each keys as [id, travel, active], i (id)}
+  <!-- `keyId`, not `id`: the overlay's own identifier is in scope here, and
+       shadowing it would hand any future use of it the matrix index instead. -->
+  {#each keys as [keyId, travel, active], i (keyId)}
     <g transform={`translate(${i * (WIDTH + GAP)}, 0)`}>
       <rect width={WIDTH} height={HEIGHT} rx="8" fill={active ? '#3ba55d' : '#202225'} />
       <rect

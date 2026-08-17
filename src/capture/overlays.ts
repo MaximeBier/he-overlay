@@ -11,6 +11,12 @@ export interface OverlayRegistry {
    * listeners.
    */
   forget(id: string): void;
+  /**
+   * Drops everyone. Sent when the connection to OBS goes away: nobody is
+   * reachable through a dead socket, and since expiry is only computed on read,
+   * a count left standing there would never come down on its own.
+   */
+  clear(): void;
   /** Number of live overlays, computed lazily on read. */
   count(now: number): number;
 }
@@ -31,6 +37,9 @@ export function createOverlayRegistry(timeoutMs: number = OVERLAY_TIMEOUT_MS): O
     },
     forget(id) {
       lastSeen.delete(id);
+    },
+    clear() {
+      lastSeen.clear();
     },
     count(now) {
       let live = 0;

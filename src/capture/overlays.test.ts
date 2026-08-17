@@ -93,6 +93,20 @@ describe('createOverlayRegistry — announced departures', () => {
     expect(registry.count(1000)).toBe(1);
   });
 
+  it('drops everyone at once when the connection is lost', () => {
+    // Expiry is computed on read, and reads only happen on a message or a
+    // keyboard report. Kill OBS with two overlays live, then stop typing, and
+    // the status bar announces "2 overlays" for good — next to a dot saying the
+    // connection is dead.
+    const registry = createOverlayRegistry();
+    registry.seen('a', 1000);
+    registry.seen('b', 1000);
+
+    registry.clear();
+
+    expect(registry.count(1000)).toBe(0);
+  });
+
   it('counts an overlay that comes back after saying goodbye', () => {
     // A reload is a goodbye followed by a hello under a new name. Nothing must
     // make the registry refuse an id it has already buried.

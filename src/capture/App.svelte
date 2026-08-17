@@ -9,13 +9,15 @@
     type ObsStatus,
   } from '../transport/obs';
   import { createCaptureSession } from './session';
-  import { loadSettings, saveSettings, overlayUrl } from './settings';
+  import { loadSettings, saveSettings, overlayUrl, browserStorage } from './settings';
   import { createOverlayRegistry } from './overlays';
   import StatusBar from './StatusBar.svelte';
   import type { DecodeAnomaly } from '../keyboard/decode';
   import type { FrameKey } from '../protocol/messages';
 
-  let settings = $state(loadSettings(localStorage));
+  const storage = browserStorage();
+
+  let settings = $state(loadSettings(storage));
   let keyboardStatus = $state<KeyboardStatus>('disconnected');
   let obsStatus = $state<ObsStatus>('idle');
   let keys = $state<FrameKey[]>([]);
@@ -39,10 +41,29 @@
     return createObsClient({
       url: `ws://localhost:${untrack(() => port)}`,
       password: untrack(() => settings.password),
-      onStatus: (s) => (obsStatus = s),
+      onStatus: (s) => {
+        obsStatus = s;
+        if (s !== 'identified') {
+          // Nobody is reachable through a dead socket, and expiry is only
+          // computed on read: a count left standing would never come down.
+          overlays.clear();
+          refreshOverlays();
+          // Same for the rate. Its window ages on keyboard reports, so with
+          // nobody typing the last good figure would stay on screen — a
+          // throughput advertised beside a dot saying the link is dead. No
+          // frame is leaving, and zero is simply the truth.
+          rate = 0;
+        }
+      },
       onMessage: (message) => {
         // The capture page discards config and frame: those are its own
         // messages (spec §6).
+        if (message.t === 'hello') {
+          // Spec §6: this reply is why the overlay speaks at all. A fresh
+          // overlay holds nothing, and the emitter would otherwise deduplicate
+          // its way to a blank page until the next keystroke.
+          session.resend(performance.now());
+        }
         if (message.t === 'hello' || message.t === 'beat') {
           overlays.seen(message.id, performance.now());
           refreshOverlays();
@@ -65,7 +86,7 @@
    */
   function reconnect() {
     settings.port = port;
-    saveSettings(localStorage, settings);
+    saveSettings(storage, settings);
     obs.close();
     obs = createClient();
     obs.connect();

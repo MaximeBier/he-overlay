@@ -33,7 +33,36 @@ export function saveSettings(
   storage: Pick<Storage, 'setItem'>,
   settings: ConnectionSettings,
 ): void {
-  storage.setItem(KEY, JSON.stringify(settings));
+  try {
+    storage.setItem(KEY, JSON.stringify(settings));
+  } catch {
+    // Quota, or a browser that refuses to write at all. Saving is a
+    // convenience; the caller is in the middle of rebuilding the OBS client,
+    // and throwing here would abort that — the user retypes their password and
+    // nothing happens, with nothing to explain it.
+  }
+}
+
+/**
+ * Local storage, or an in-memory stand-in when the browser refuses.
+ *
+ * Reading `localStorage` at all throws when cookies are blocked — not the call,
+ * the property access. Unguarded, that happens while the component initialises
+ * and the capture page does not mount at all: a blank screen for a setting the
+ * user may not even know they have. Credentials simply stop surviving a reload.
+ */
+export function browserStorage(): Pick<Storage, 'getItem' | 'setItem'> {
+  try {
+    const storage = globalThis.localStorage;
+    storage.getItem(KEY);
+    return storage;
+  } catch {
+    const memory = new Map<string, string>();
+    return {
+      getItem: (key) => memory.get(key) ?? null,
+      setItem: (key, value) => void memory.set(key, value),
+    };
+  }
 }
 
 /**
