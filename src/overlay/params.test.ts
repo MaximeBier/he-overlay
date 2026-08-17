@@ -17,27 +17,20 @@ describe('readOverlayParams', () => {
     expect(readOverlayParams('', 'password=hunter2').password).toBe('hunter2');
   });
 
-  it('lets the fragment win over the query string, parameter by parameter', () => {
-    // The port is not a secret, and keeping it in the query string helps
-    // diagnose from the logs. Only the password has to hide.
-    expect(readOverlayParams('?port=4456', '#password=hunter2')).toEqual({
-      port: 4456,
-      password: 'hunter2',
-    });
-    expect(readOverlayParams('?password=old', '#password=new').password).toBe('new');
+  // The port is not a secret, and seeing it in the logs helps diagnose. The
+  // password is another matter: reading it from the query string would keep
+  // alive the very path that leaks it to whoever hosts the page.
+  it('reads the port from either place, the fragment winning', () => {
+    expect(readOverlayParams('?port=4456', '').port).toBe(4456);
+    expect(readOverlayParams('', '#port=4456').port).toBe(4456);
+    expect(readOverlayParams('?port=1111', '#port=4456').port).toBe(4456);
   });
 
-  it('still reads the query string, so existing OBS sources keep working', () => {
+  it('refuses to read a password from the query string', () => {
+    expect(readOverlayParams('?password=hunter2', '').password).toBe('');
     expect(readOverlayParams('?port=4456&password=hunter2', '')).toEqual({
       port: 4456,
-      password: 'hunter2',
-    });
-  });
-
-  it('reads the port and the password from the URL', () => {
-    expect(readOverlayParams('?port=4456&password=hunter2')).toEqual({
-      port: 4456,
-      password: 'hunter2',
+      password: '',
     });
   });
 
@@ -61,6 +54,6 @@ describe('readOverlayParams', () => {
   });
 
   it('decodes a password containing reserved characters', () => {
-    expect(readOverlayParams('?password=a%26b%3Dc').password).toBe('a&b=c');
+    expect(readOverlayParams('', '#password=a%26b%3Dc').password).toBe('a&b=c');
   });
 });
