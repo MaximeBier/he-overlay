@@ -1,0 +1,18 @@
+# LF everywhere, in the repository and in the working tree. Overrides the
+# global core.autocrlf=true of this Windows machine, whose CRLF checkout would
+# otherwise show up as a whole-file diff and defeat the nginx image build,
+# which runs on Linux.
+* text=auto eol=lf
+
+# The two Windows shells that genuinely need CRLF: cmd.exe mis-parses a `goto`
+# past a lone LF. PowerShell does not care, but keeping the pair together
+# avoids having to remember which one is which.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary assets: never touched, never diffed as text.
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary
