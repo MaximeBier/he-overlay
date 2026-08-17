@@ -150,6 +150,32 @@ describe('createObsClient', () => {
     digest.mockRestore();
   });
 
+  it('never sends an identify computed for a socket it has replaced', async () => {
+    // The digest is awaited. If the socket is swapped during that await, the
+    // Identify answers the *previous* challenge on the *new* socket, which
+    // replies 4009 — reporting auth-failed on a perfectly good password.
+    // The first digest is held open, so the swap happens *during* the await
+    // rather than by luck of scheduling. Later digests run for real.
+    let release!: (value: ArrayBuffer) => void;
+    const held = new Promise<ArrayBuffer>((resolve) => {
+      release = resolve;
+    });
+    const digest = vi.spyOn(crypto.subtle, 'digest').mockImplementationOnce(() => held);
+
+    const { client, sockets, socket } = setup('hunter2');
+    client.connect();
+    socket().receive(HELLO_AUTH);
+    client.close();
+    client.connect();
+
+    release(new ArrayBuffer(32));
+    await vi.waitFor(() => expect(digest).toHaveBeenCalledTimes(2));
+    await flush();
+
+    expect(sockets[1]!.sent).toEqual([]);
+    digest.mockRestore();
+  });
+
   it('survives a socket constructor that throws', () => {
     // `new WebSocket('ws://localhost:99999')` throws a SyntaxError. Thrown
     // during component setup, it stops the overlay from mounting at all.

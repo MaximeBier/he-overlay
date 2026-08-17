@@ -42,8 +42,11 @@ export interface ObsClient {
 /**
  * Compile-time proof that our socket interface describes the browser API and
  * not merely our own double. Reading the close code as a bare argument used to
- * report every refused password as an unreachable server; this line turns that
+ * report every refused password as an unreachable server; these lines turn that
  * class of mistake into a build error.
+ *
+ * Both aliases are unused by design — being accepted by the compiler *is* the
+ * assertion. Whoever adds a linter should exempt them rather than delete them.
  */
 type AcceptsBrowserEvent<E, H extends (event: E) => void> = H;
 type _CloseIsFaithful = AcceptsBrowserEvent<CloseEvent, NonNullable<SocketLike['onclose']>>;
@@ -66,6 +69,16 @@ export function createObsClient(options: ObsClientOptions): ObsClient {
     socket?.send(JSON.stringify(payload));
   }
 
+  /**
+   * Writes to one named socket rather than to whichever is current. Anything
+   * that crosses an `await` must use this: the socket can be replaced while a
+   * digest is being computed, and an Identify answering the previous challenge
+   * would earn a 4009 — auth-failed reported on a correct password.
+   */
+  function sendTo(target: SocketLike, payload: unknown) {
+    target.send(JSON.stringify(payload));
+  }
+
   /** Drops a socket and its handlers, so no late event can speak for it. */
   function discard(target: SocketLike) {
     target.onopen = null;
@@ -74,7 +87,10 @@ export function createObsClient(options: ObsClientOptions): ObsClient {
     target.onmessage = null;
   }
 
-  async function identify(hello: { authentication?: { challenge: string; salt: string } }) {
+  async function identify(
+    hello: { authentication?: { challenge: string; salt: string } },
+    target: SocketLike,
+  ) {
     const data: Record<string, unknown> = {
       rpcVersion: 1,
       eventSubscriptions: GENERAL_EVENTS,
@@ -86,10 +102,11 @@ export function createObsClient(options: ObsClientOptions): ObsClient {
         hello.authentication.challenge,
       );
     }
-    send({ op: 1, d: data });
+    if (socket !== target) return;
+    sendTo(target, { op: 1, d: data });
   }
 
-  function handle(raw: string) {
+  function handle(raw: string, target: SocketLike) {
     let payload: { op?: number; d?: Record<string, unknown> };
     try {
       payload = JSON.parse(raw);
@@ -98,11 +115,12 @@ export function createObsClient(options: ObsClientOptions): ObsClient {
     }
 
     if (payload.op === 0) {
-      identify((payload.d ?? {}) as Parameters<typeof identify>[0]).catch(() => {
+      identify((payload.d ?? {}) as Parameters<typeof identify>[0], target).catch(() => {
         // `crypto.subtle` only exists in a secure context: over plain HTTP on a
         // LAN address — an OBS browser source pointed at http://<ip>:8080 —
         // the digest throws. Swallowing it would leave the client stuck on
         // `connecting` forever, with no signal and nothing retrying.
+        if (socket !== target) return;
         fail('unreachable');
       });
       return;
@@ -148,7 +166,7 @@ export function createObsClient(options: ObsClientOptions): ObsClient {
     // otherwise tear down the connection that replaced it.
     next.onmessage = (event) => {
       if (socket !== next) return;
-      handle(event.data);
+      handle(event.data, next);
     };
     next.onerror = () => {
       if (socket !== next) return;
@@ -184,12 +202,7 @@ export function createObsClient(options: ObsClientOptions): ObsClient {
       });
     },
     close() {
-      if (socket) {
-        discard(socket);
-        socket.close();
-        socket = null;
-      }
-      setStatus('idle');
+      fail('idle');
     },
     get status() {
       return status;

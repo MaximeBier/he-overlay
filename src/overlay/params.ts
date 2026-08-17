@@ -1,5 +1,6 @@
-export { DEFAULT_OBS_PORT } from '../transport/obs';
 import { DEFAULT_OBS_PORT } from '../transport/obs';
+
+export { DEFAULT_OBS_PORT };
 
 /** Highest port number a TCP URL can carry. Beyond it, `new WebSocket` throws. */
 const MAX_PORT = 65535;
