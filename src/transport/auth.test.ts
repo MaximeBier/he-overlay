@@ -16,8 +16,10 @@ describe('computeAuth', () => {
   });
 
   it('handles non-ASCII characters in the password', async () => {
-    await expect(computeAuth('mot-de-passé-é', 'sel', 'défi')).resolves.toBe(
-      reference('mot-de-passé-é', 'sel', 'défi'),
+    // Accented fixtures on purpose: UTF-8 must be hashed byte for byte, and a
+    // latin-1 encoding somewhere in the chain would only show up here.
+    await expect(computeAuth('päss-wörd-é', 'sält', 'challengé')).resolves.toBe(
+      reference('päss-wörd-é', 'sält', 'challengé'),
     );
   });
 
