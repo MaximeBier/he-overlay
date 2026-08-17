@@ -3,6 +3,9 @@ import { envelope, parseMessage, type OverlayMessage } from '../protocol/message
 
 export type ObsStatus = 'idle' | 'connecting' | 'identified' | 'auth-failed' | 'unreachable';
 
+/** Port obs-websocket listens on out of the box. Configurable in OBS (spec §6.1). */
+export const DEFAULT_OBS_PORT = 4455;
+
 /** obs-websocket 5.x close code for a refused authentication. */
 const AUTH_FAILED_CODE = 4009;
 /** EventSubscription.General: contains CustomEvent. */
@@ -36,6 +39,16 @@ export interface ObsClient {
   readonly status: ObsStatus;
 }
 
+/**
+ * Compile-time proof that our socket interface describes the browser API and
+ * not merely our own double. Reading the close code as a bare argument used to
+ * report every refused password as an unreachable server; this line turns that
+ * class of mistake into a build error.
+ */
+type AcceptsBrowserEvent<E, H extends (event: E) => void> = H;
+type _CloseIsFaithful = AcceptsBrowserEvent<CloseEvent, NonNullable<SocketLike['onclose']>>;
+type _MessageIsFaithful = AcceptsBrowserEvent<MessageEvent, NonNullable<SocketLike['onmessage']>>;
+
 export function createObsClient(options: ObsClientOptions): ObsClient {
   const factory =
     options.socketFactory ?? ((url: string) => new WebSocket(url) as unknown as SocketLike);
@@ -51,6 +64,14 @@ export function createObsClient(options: ObsClientOptions): ObsClient {
 
   function send(payload: unknown) {
     socket?.send(JSON.stringify(payload));
+  }
+
+  /** Drops a socket and its handlers, so no late event can speak for it. */
+  function discard(target: SocketLike) {
+    target.onopen = null;
+    target.onclose = null;
+    target.onerror = null;
+    target.onmessage = null;
   }
 
   async function identify(hello: { authentication?: { challenge: string; salt: string } }) {
@@ -77,7 +98,13 @@ export function createObsClient(options: ObsClientOptions): ObsClient {
     }
 
     if (payload.op === 0) {
-      void identify((payload.d ?? {}) as Parameters<typeof identify>[0]);
+      identify((payload.d ?? {}) as Parameters<typeof identify>[0]).catch(() => {
+        // `crypto.subtle` only exists in a secure context: over plain HTTP on a
+        // LAN address — an OBS browser source pointed at http://<ip>:8080 —
+        // the digest throws. Swallowing it would leave the client stuck on
+        // `connecting` forever, with no signal and nothing retrying.
+        fail('unreachable');
+      });
       return;
     }
     if (payload.op === 2) {
@@ -90,16 +117,45 @@ export function createObsClient(options: ObsClientOptions): ObsClient {
     }
   }
 
+  /** Gives up on the current socket, leaving the client ready to try again. */
+  function fail(reason: ObsStatus) {
+    if (socket) {
+      discard(socket);
+      socket.close();
+      socket = null;
+    }
+    setStatus(reason);
+  }
+
   function connect() {
     if (socket) return;
     setStatus('connecting');
-    const next = factory(options.url);
+
+    let next: SocketLike;
+    try {
+      next = factory(options.url);
+    } catch {
+      // The WebSocket constructor throws on a malformed URL — an out-of-range
+      // port typed into the OBS browser source is enough. Left unhandled, it
+      // escapes the caller and stops the overlay from mounting at all.
+      setStatus('unreachable');
+      return;
+    }
     socket = next;
 
-    next.onopen = () => {};
-    next.onmessage = (event) => handle(event.data);
-    next.onerror = () => setStatus('unreachable');
+    // Every handler checks that it still speaks for the live socket: a browser
+    // fires onclose well after close() returns, and a stale event would
+    // otherwise tear down the connection that replaced it.
+    next.onmessage = (event) => {
+      if (socket !== next) return;
+      handle(event.data);
+    };
+    next.onerror = () => {
+      if (socket !== next) return;
+      setStatus('unreachable');
+    };
     next.onclose = (event) => {
+      if (socket !== next) return;
       socket = null;
       setStatus(event?.code === AUTH_FAILED_CODE ? 'auth-failed' : 'unreachable');
     };
@@ -108,6 +164,10 @@ export function createObsClient(options: ObsClientOptions): ObsClient {
   return {
     connect,
     ensureConnected() {
+      // A refused password will be refused again: retrying on every report
+      // would hammer OBS ~50 times a second for nothing. Only an explicit
+      // connect(), carrying a new password, clears this.
+      if (status === 'auth-failed') return;
       if (!socket) connect();
     },
     broadcast(message) {
@@ -124,8 +184,11 @@ export function createObsClient(options: ObsClientOptions): ObsClient {
       });
     },
     close() {
-      socket?.close();
-      socket = null;
+      if (socket) {
+        discard(socket);
+        socket.close();
+        socket = null;
+      }
       setStatus('idle');
     },
     get status() {

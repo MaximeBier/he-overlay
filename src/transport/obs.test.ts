@@ -1,31 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createObsClient, type SocketLike, type ObsStatus } from './obs';
+import { createObsClient, type ObsStatus } from './obs';
 import { computeAuth } from './auth';
 import type { OverlayMessage } from '../protocol/messages';
-
-class FakeSocket implements SocketLike {
-  sent: string[] = [];
-  closed = false;
-  onopen: (() => void) | null = null;
-  onclose: ((event: { code?: number }) => void) | null = null;
-  onerror: (() => void) | null = null;
-  onmessage: ((event: { data: string }) => void) | null = null;
-
-  send(data: string) {
-    this.sent.push(data);
-  }
-  close() {
-    this.closed = true;
-    // A browser CloseEvent, like the real one: 1000 is a normal closure.
-    this.onclose?.({ code: 1000 });
-  }
-  receive(payload: unknown) {
-    this.onmessage?.({ data: JSON.stringify(payload) });
-  }
-  parsed() {
-    return this.sent.map((raw) => JSON.parse(raw));
-  }
-}
+import { FakeSocket, HELLO_AUTH, HELLO_NO_AUTH } from '../test/fixtures';
 
 function setup(password = 'hunter2') {
   const sockets: FakeSocket[] = [];
@@ -47,20 +24,13 @@ function setup(password = 'hunter2') {
   return { client, sockets, statuses, messages, socket: () => sockets[sockets.length - 1]! };
 }
 
-const HELLO_NO_AUTH = { op: 0, d: { rpcVersion: 1 } };
-const HELLO_AUTH = {
-  op: 0,
-  d: {
-    rpcVersion: 1,
-    authentication: { challenge: 'chchch', salt: 'saltysalt' },
-  },
-};
+/** Lets queued microtasks run — close events land there, as in the browser. */
+const flush = () => new Promise<void>((resolve) => queueMicrotask(resolve));
 
 describe('createObsClient', () => {
   it('identifies without authentication when the server asks for none', async () => {
     const { client, socket } = setup();
     client.connect();
-    socket().onopen?.();
     socket().receive(HELLO_NO_AUTH);
     await vi.waitFor(() => expect(socket().sent).toHaveLength(1));
 
@@ -75,7 +45,6 @@ describe('createObsClient', () => {
   it('answers the authentication challenge', async () => {
     const { client, socket } = setup('hunter2');
     client.connect();
-    socket().onopen?.();
     socket().receive(HELLO_AUTH);
     await vi.waitFor(() => expect(socket().sent).toHaveLength(1));
 
@@ -87,7 +56,6 @@ describe('createObsClient', () => {
   it('turns identified once the Identified message arrives', () => {
     const { client, socket, statuses } = setup();
     client.connect();
-    socket().onopen?.();
     socket().receive(HELLO_NO_AUTH);
     socket().receive({ op: 2, d: { negotiatedRpcVersion: 1 } });
 
@@ -102,7 +70,6 @@ describe('createObsClient', () => {
     // would report every refused password as an unreachable server.
     const refused = setup();
     refused.client.connect();
-    refused.socket().onopen?.();
     refused.socket().receive(HELLO_AUTH);
     refused.socket().onclose?.({ code: 4009 });
 
@@ -118,7 +85,6 @@ describe('createObsClient', () => {
   it('broadcasts a wrapped message through BroadcastCustomEvent', () => {
     const { client, socket } = setup();
     client.connect();
-    socket().onopen?.();
     socket().receive(HELLO_NO_AUTH);
     socket().receive({ op: 2, d: { negotiatedRpcVersion: 1 } });
     socket().sent.length = 0;
@@ -144,7 +110,6 @@ describe('createObsClient', () => {
   it('surfaces incoming CustomEvents and ignores foreign payloads', () => {
     const { client, socket, messages } = setup();
     client.connect();
-    socket().onopen?.();
     socket().receive(HELLO_NO_AUTH);
     socket().receive({ op: 2, d: {} });
 
@@ -161,13 +126,66 @@ describe('createObsClient', () => {
   it('ensureConnected does not reopen an already identified socket', () => {
     const { client, socket, sockets } = setup();
     client.connect();
-    socket().onopen?.();
     socket().receive(HELLO_NO_AUTH);
     socket().receive({ op: 2, d: {} });
 
     client.ensureConnected();
 
     expect(sockets).toHaveLength(1);
+  });
+
+  it('does not stay stuck on connecting when the digest cannot be computed', async () => {
+    // `crypto.subtle` is absent outside a secure context. An unobserved
+    // rejection would freeze the client on `connecting`, with `socket` still
+    // set — so nothing would ever retry.
+    const digest = vi
+      .spyOn(crypto.subtle, 'digest')
+      .mockRejectedValue(new Error('insecure context'));
+    const { client, socket } = setup('hunter2');
+    client.connect();
+    socket().receive(HELLO_AUTH);
+
+    await vi.waitFor(() => expect(client.status).not.toBe('connecting'));
+
+    digest.mockRestore();
+  });
+
+  it('survives a socket constructor that throws', () => {
+    // `new WebSocket('ws://localhost:99999')` throws a SyntaxError. Thrown
+    // during component setup, it stops the overlay from mounting at all.
+    const client = createObsClient({
+      url: 'ws://localhost:99999',
+      password: '',
+      onStatus: () => {},
+      onMessage: () => {},
+      socketFactory: () => {
+        throw new SyntaxError('port out of range');
+      },
+    });
+
+    expect(() => client.connect()).not.toThrow();
+    expect(client.status).toBe('unreachable');
+    expect(() => client.ensureConnected()).not.toThrow();
+  });
+
+  it('ignores the close event of a socket it has already replaced', async () => {
+    // A browser fires onclose long after close() returns. By then a fresh
+    // socket may be open and identified: letting the stale event run would
+    // drop the live connection and silently discard every frame.
+    const { client, socket, sockets } = setup();
+    client.connect();
+    client.close();
+    client.connect();
+    socket().receive(HELLO_NO_AUTH);
+    socket().receive({ op: 2, d: {} });
+
+    await flush();
+
+    expect(client.status).toBe('identified');
+    expect(sockets).toHaveLength(2);
+
+    client.broadcast({ v: 1, t: 'hello' });
+    expect(socket().sent.length).toBeGreaterThan(0);
   });
 
   it('ensureConnected reopens after a close', () => {
