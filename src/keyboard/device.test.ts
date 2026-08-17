@@ -106,6 +106,25 @@ describe('createKeyboardLink', () => {
     expect(link.status).toBe('connected');
   });
 
+  it('ignores reports from a device that is no longer the current one', async () => {
+    // Two analog Wootings: A attaches, A is unplugged, B takes over. A's
+    // listener is still in place — it must not speak for a keyboard we left.
+    const first = fakeDevice([0xff53]);
+    const second = fakeDevice([0xff53], 'Wooting 60HE');
+    const hid = fakeHid([first]);
+    const onReport = vi.fn();
+    const link = createKeyboardLink({ hid, onReport, onStatus: () => {} });
+    await link.resume();
+
+    hid.fire('disconnect', first);
+    hid.fire('connect', second);
+    await vi.waitFor(() => expect(link.status).toBe('connected'));
+
+    first.emit(Array.from({ length: 64 }, () => 0));
+
+    expect(onReport).not.toHaveBeenCalled();
+  });
+
   it('ignores reports carrying another report id', async () => {
     // Spec §3.1 pins reportId to 0, and WebHID strips that byte from `data` —
     // which is exactly why the buffer is 64 bytes long. Another report on the

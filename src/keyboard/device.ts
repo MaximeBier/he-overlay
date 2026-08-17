@@ -82,6 +82,11 @@ export function createKeyboardLink(options: KeyboardLinkOptions): KeyboardLink {
     if (!listening.has(device)) {
       listening.add(device);
       device.addEventListener('inputreport', (event) => {
+        // The listener outlives `current`: it is never removed, and a second
+        // analog keyboard can take over in the meantime. It must state whom it
+        // speaks for rather than assume it is still the only one.
+        if (current !== device) return;
+
         // Spec §3.1 pins the analog report to reportId 0. WebHID strips that
         // byte from `data`, which is what makes the buffer 64 bytes long; any
         // other report on this interface has a different shape entirely.
