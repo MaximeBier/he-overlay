@@ -3,7 +3,7 @@
   import { readOverlayParams } from './params';
   import type { FrameKey } from '../protocol/messages';
 
-  const { port, password } = readOverlayParams(location.search);
+  const { port, password } = readOverlayParams(location.search, location.hash);
 
   let keys = $state<FrameKey[]>([]);
 

@@ -2,6 +2,38 @@ import { describe, it, expect } from 'vitest';
 import { readOverlayParams, DEFAULT_OBS_PORT } from './params';
 
 describe('readOverlayParams', () => {
+  // A fragment is never sent to the server — a property of HTTP itself, not a
+  // setting. It is the only place the OBS password can travel without ending up
+  // in our own access log, now that we host the page (spec §5.5, §10).
+  it('reads the password from the fragment', () => {
+    expect(readOverlayParams('', '#port=4456&password=hunter2')).toEqual({
+      port: 4456,
+      password: 'hunter2',
+    });
+  });
+
+  it('strips the leading hash', () => {
+    expect(readOverlayParams('', '#password=hunter2').password).toBe('hunter2');
+    expect(readOverlayParams('', 'password=hunter2').password).toBe('hunter2');
+  });
+
+  it('lets the fragment win over the query string, parameter by parameter', () => {
+    // The port is not a secret, and keeping it in the query string helps
+    // diagnose from the logs. Only the password has to hide.
+    expect(readOverlayParams('?port=4456', '#password=hunter2')).toEqual({
+      port: 4456,
+      password: 'hunter2',
+    });
+    expect(readOverlayParams('?password=old', '#password=new').password).toBe('new');
+  });
+
+  it('still reads the query string, so existing OBS sources keep working', () => {
+    expect(readOverlayParams('?port=4456&password=hunter2', '')).toEqual({
+      port: 4456,
+      password: 'hunter2',
+    });
+  });
+
   it('reads the port and the password from the URL', () => {
     expect(readOverlayParams('?port=4456&password=hunter2')).toEqual({
       port: 4456,
