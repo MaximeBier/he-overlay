@@ -15,7 +15,10 @@ export interface HidDeviceLike {
   close(): Promise<void>;
   addEventListener(
     type: 'inputreport',
-    handler: (event: { data: DataView; reportId: number; timeStamp?: number }) => void,
+    // `timeStamp` is required, not optional: HIDInputReportEvent extends Event,
+    // which always carries one. Marking it optional would invent a fallback
+    // path that can never run.
+    handler: (event: { data: DataView; reportId: number; timeStamp: number }) => void,
   ): void;
 }
 
@@ -64,32 +67,51 @@ export function createKeyboardLink(options: KeyboardLinkOptions): KeyboardLink {
     options.onStatus(next);
   }
 
+  /**
+   * Devices we have already subscribed to. Chrome hands back the very same
+   * HIDDevice object across getDevices(), requestDevice() and a replug, and
+   * WebHID offers no way to ask whether a listener is already attached — so a
+   * second attach would silently double every report.
+   */
+  const listening = new WeakSet<HidDeviceLike>();
+
   async function attach(device: HidDeviceLike) {
+    if (current === device) return;
     if (!device.opened) await device.open();
-    device.addEventListener('inputreport', (event) => {
-      const bytes = new Uint8Array(
-        event.data.buffer,
-        event.data.byteOffset,
-        event.data.byteLength,
-      );
-      // The timestamp comes from the event, never from a timer (spec §2.2).
-      options.onReport(bytes, event.timeStamp ?? performance.now());
-    });
+
+    if (!listening.has(device)) {
+      listening.add(device);
+      device.addEventListener('inputreport', (event) => {
+        // Spec §3.1 pins the analog report to reportId 0. WebHID strips that
+        // byte from `data`, which is what makes the buffer 64 bytes long; any
+        // other report on this interface has a different shape entirely.
+        if (event.reportId !== 0) return;
+
+        const bytes = new Uint8Array(
+          event.data.buffer,
+          event.data.byteOffset,
+          event.data.byteLength,
+        );
+        // The timestamp comes from the event, never from a timer (spec §2.2).
+        options.onReport(bytes, event.timeStamp);
+      });
+    }
+
     current = device;
     setStatus('connected');
   }
 
   async function adopt(devices: HidDeviceLike[]): Promise<void> {
-    if (devices.length === 0) {
-      setStatus('no-permission');
-      return;
-    }
     const analog = devices.find(isAnalogDevice);
-    if (!analog) {
-      setStatus('no-analog-interface');
+    if (analog) {
+      await attach(analog);
       return;
     }
-    await attach(analog);
+    // Never downgrade a keyboard that is attached and streaming. Dismissing the
+    // device picker resolves with an empty list, and saying no-permission then
+    // would contradict a preview the user can watch moving.
+    if (current) return;
+    setStatus(devices.length === 0 ? 'no-permission' : 'no-analog-interface');
   }
 
   if (hid) {

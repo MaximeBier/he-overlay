@@ -25,6 +25,7 @@ export interface AnalogEntry {
 
 export type DecodeAnomaly =
   | { kind: 'unknown-low-bits'; index: number; field: number }
+  | { kind: 'duplicate-index'; index: number }
   | { kind: 'bad-length'; length: number };
 
 export interface DecodeResult {
@@ -35,6 +36,10 @@ export interface DecodeResult {
 export function decodeAnalogReport(data: Uint8Array): DecodeResult {
   const entries: AnalogEntry[] = [];
   const anomalies: DecodeAnomaly[] = [];
+  /** Filtering tagged entries is what makes the index unique (spec §3.1). We
+   * enforce that invariant rather than trust it: downstream, the index keys the
+   * overlay's SVG nodes, and a duplicate there is fatal. */
+  const seen = new Set<number>();
 
   if (data.length !== ANALOG_REPORT_BYTES) {
     return { entries, anomalies: [{ kind: 'bad-length', length: data.length }] };
@@ -61,6 +66,14 @@ export function decodeAnalogReport(data: Uint8Array): DecodeResult {
       }
       continue;
     }
+
+    if (seen.has(index)) {
+      // Keep the first one, log the rest: the same rule as unknown-low-bits —
+      // report what we do not understand instead of guessing at it.
+      anomalies.push({ kind: 'duplicate-index', index });
+      continue;
+    }
+    seen.add(index);
 
     entries.push({
       index,

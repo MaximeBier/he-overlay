@@ -1,53 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import {
-  createKeyboardLink,
-  isAnalogDevice,
-  type HidDeviceLike,
-  type HidLike,
-  type KeyboardStatus,
-} from './device';
-
-function fakeDevice(usagePages: number[], productName = 'Wooting Two HE (ARM)'): HidDeviceLike {
-  const handlers: ((event: { data: DataView; reportId: number }) => void)[] = [];
-  return {
-    opened: false,
-    productName,
-    collections: usagePages.map((usagePage) => ({ usagePage })),
-    async open() {
-      this.opened = true;
-    },
-    async close() {
-      this.opened = false;
-    },
-    addEventListener(_type, handler) {
-      handlers.push(handler);
-    },
-    // @ts-expect-error test-only hook, outside the interface
-    emit(bytes: number[]) {
-      const data = new DataView(new Uint8Array(bytes).buffer);
-      for (const handler of handlers) handler({ data, reportId: 0 });
-    },
-  };
-}
-
-function fakeHid(devices: HidDeviceLike[]) {
-  const listeners: Record<string, ((event: { device: HidDeviceLike }) => void)[]> = {};
-  const hid: HidLike & { fire(type: string, device: HidDeviceLike): void } = {
-    async getDevices() {
-      return devices;
-    },
-    async requestDevice() {
-      return devices;
-    },
-    addEventListener(type, handler) {
-      (listeners[type] ??= []).push(handler as never);
-    },
-    fire(type, device) {
-      for (const handler of listeners[type] ?? []) handler({ device });
-    },
-  };
-  return hid;
-}
+import { createKeyboardLink, isAnalogDevice, type KeyboardStatus } from './device';
+import { fakeDevice, fakeHid } from '../test/fixtures';
 
 describe('isAnalogDevice', () => {
   it('accepts a 0xFF53 collection', () => {
@@ -116,15 +69,64 @@ describe('createKeyboardLink', () => {
     expect(link.status).toBe('no-analog-interface');
   });
 
+  it('does not attach twice to the same device', async () => {
+    // Chrome hands back the very same HIDDevice object for a device already
+    // authorised. Attaching again would stack a second listener, and every
+    // report would be decoded and broadcast twice — silently doubling the
+    // frame rate towards OBS.
+    const device = fakeDevice([0xff53]);
+    const onReport = vi.fn();
+    const link = createKeyboardLink({
+      hid: fakeHid([device]),
+      onReport,
+      onStatus: () => {},
+    });
+
+    await link.resume();
+    await link.requestPermission();
+    device.emit(Array.from({ length: 64 }, () => 0));
+
+    expect(device.listenerCount()).toBe(1);
+    expect(onReport).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a working keyboard when the device picker is dismissed', async () => {
+    // requestDevice() resolves with [] when the user closes the dialog. Saying
+    // no-permission then would contradict an overlay that is visibly running.
+    const device = fakeDevice([0xff53]);
+    const link = createKeyboardLink({
+      hid: fakeHid([device], []),
+      onReport: () => {},
+      onStatus: () => {},
+    });
+    await link.resume();
+
+    await link.requestPermission();
+
+    expect(link.status).toBe('connected');
+  });
+
+  it('ignores reports carrying another report id', async () => {
+    // Spec §3.1 pins reportId to 0, and WebHID strips that byte from `data` —
+    // which is exactly why the buffer is 64 bytes long. Another report on the
+    // same interface must not reach the decoder.
+    const device = fakeDevice([0xff53]);
+    const onReport = vi.fn();
+    const link = createKeyboardLink({ hid: fakeHid([device]), onReport, onStatus: () => {} });
+    await link.resume();
+
+    device.emit(Array.from({ length: 64 }, () => 0), 3);
+
+    expect(onReport).not.toHaveBeenCalled();
+  });
+
   it('forwards incoming reports as a Uint8Array', async () => {
     const device = fakeDevice([0xff53]);
     const onReport = vi.fn();
     const link = createKeyboardLink({ hid: fakeHid([device]), onReport, onStatus: () => {} });
     await link.resume();
 
-    (device as unknown as { emit(bytes: number[]): void }).emit(
-      Array.from({ length: 64 }, (_, i) => i),
-    );
+    device.emit(Array.from({ length: 64 }, (_, i) => i));
 
     expect(onReport).toHaveBeenCalledTimes(1);
     const [data, timestamp] = onReport.mock.calls[0]!;

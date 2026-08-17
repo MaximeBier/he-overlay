@@ -1,21 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { decodeAnalogReport, MAX_TRAVEL } from './decode';
-
-/**
- * Builds a 4-byte entry.
- * `low` carries bits 0..5 of the 16-bit field: bit 0 is the actuation verdict,
- * bits 1..5 are entry type tags (spec §3.1).
- */
-function entry(index: number, usage: number, travel: number, low: number): number[] {
-  const field = (travel << 6) | low;
-  return [index, usage, field & 0xff, (field >> 8) & 0xff];
-}
-
-function report(...entries: number[][]): Uint8Array {
-  const buf = new Uint8Array(64);
-  buf.set(entries.flat());
-  return buf;
-}
+import { entry, report } from '../test/fixtures';
 
 describe('decodeAnalogReport', () => {
   it('decodes a primary entry: travel and actuation', () => {
@@ -50,6 +35,19 @@ describe('decodeAnalogReport', () => {
     );
 
     expect(entries).toEqual([{ index: 174, usage: 0x50, travel: 996, active: true }]);
+  });
+
+  // The matrix index keys the overlay's SVG nodes. Two primary entries sharing
+  // one index would make Svelte throw on a duplicate key and freeze the overlay
+  // mid-stream — on the one surface where a failure is invisible to whoever is
+  // configuring it and visible to every viewer.
+  it('keeps one entry per index and logs the duplicate', () => {
+    const { entries, anomalies } = decodeAnalogReport(
+      report(entry(174, 0x50, 996, 0x01), entry(174, 0x50, 100, 0x00)),
+    );
+
+    expect(entries).toEqual([{ index: 174, usage: 0x50, travel: 996, active: true }]);
+    expect(anomalies).toEqual([{ kind: 'duplicate-index', index: 174 }]);
   });
 
   // Test 5 of spec §12.1 — a full report has no end sentinel.
