@@ -1,5 +1,5 @@
-// `defineConfig` vient de `vitest/config` et non de `vite` : c'est ce qui type
-// la clé `test` ci-dessous. La configuration Vite reste identique.
+// `defineConfig` comes from `vitest/config`, not from `vite`: that is what
+// types the `test` key below. The Vite configuration itself is unchanged.
 import { defineConfig } from 'vitest/config';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { svelteTesting } from '@testing-library/svelte/vite';
@@ -9,10 +9,9 @@ export default defineConfig({
   plugins: [svelte(), svelteTesting()],
   build: {
     rollupOptions: {
-      // Deux entrées applicatives compilées séparément : le code de l'éditeur
-      // n'entre jamais dans le bundle chargé en permanence par OBS (spec §5.1).
-      // `home` s'y ajoute : page statique sans script, elle ne produit aucun
-      // bundle et n'alourdit donc ni l'une ni l'autre.
+      // Two application entries, compiled separately: the editor code never
+      // reaches the bundle OBS keeps loaded (spec §5.1). `home` joins them as a
+      // scriptless static page — it produces no bundle and weighs on neither.
       input: {
         home: resolve(import.meta.dirname, 'index.html'),
         capture: resolve(import.meta.dirname, 'capture.html'),

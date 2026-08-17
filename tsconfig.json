@@ -4,8 +4,9 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    // "svelte" porte la déclaration ambiante du module `*.svelte` : notre clé
-    // `types` écrase celle de @tsconfig/svelte, il faut donc la réinscrire.
+    // "svelte" carries the ambient declaration for `*.svelte` modules: our
+    // `types` key overrides the one from @tsconfig/svelte, so it must be listed
+    // again here.
     "types": ["svelte", "vite/client", "vitest/globals", "node"],
     "strict": true,
     "noUncheckedIndexedAccess": true,
