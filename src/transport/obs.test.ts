@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createObsClient, type ObsStatus } from './obs';
+import { createObsClient, RETRY_MAX_MS, type ObsStatus } from './obs';
 import { computeAuth } from './auth';
 import type { OverlayMessage } from '../protocol/messages';
 import { FakeSocket, HELLO_AUTH, HELLO_NO_AUTH } from '../test/fixtures';
@@ -129,7 +129,7 @@ describe('createObsClient', () => {
     socket().receive(HELLO_NO_AUTH);
     socket().receive({ op: 2, d: {} });
 
-    client.ensureConnected();
+    client.ensureConnected(0);
 
     expect(sockets).toHaveLength(1);
   });
@@ -191,7 +191,7 @@ describe('createObsClient', () => {
 
     expect(() => client.connect()).not.toThrow();
     expect(client.status).toBe('unreachable');
-    expect(() => client.ensureConnected()).not.toThrow();
+    expect(() => client.ensureConnected(0)).not.toThrow();
   });
 
   it('ignores the close event of a socket it has already replaced', async () => {
@@ -219,8 +219,161 @@ describe('createObsClient', () => {
     client.connect();
     socket().onclose?.({ code: 1000 });
 
-    client.ensureConnected();
+    client.ensureConnected(0);
 
     expect(sockets).toHaveLength(2);
+  });
+});
+
+describe('createObsClient — spacing the retries out', () => {
+  it('does not retry on every report while OBS stays closed', () => {
+    // ensureConnected() runs on every keyboard report, ~50 times a second. With
+    // OBS closed, an unspaced retry opens and drops a socket at that rate — and
+    // Chrome logs an unsuppressable "WebSocket connection failed" for each one,
+    // drowning the very console where this gets diagnosed.
+    const { client, socket, sockets } = setup();
+    client.connect();
+    socket().onclose?.({ code: 1006 });
+
+    client.ensureConnected(0);
+    socket().onclose?.({ code: 1006 });
+    client.ensureConnected(1);
+    socket().onclose?.({ code: 1006 });
+    client.ensureConnected(2);
+
+    expect(sockets).toHaveLength(2);
+  });
+
+  it('backs off further on every failed attempt', () => {
+    const { client, socket, sockets } = setup();
+    client.connect();
+    socket().onclose?.({ code: 1006 });
+
+    client.ensureConnected(0);
+    socket().onclose?.({ code: 1006 });
+    // 500 ms after the first retry, not after the initial connect().
+    client.ensureConnected(499);
+    expect(sockets).toHaveLength(2);
+
+    client.ensureConnected(500);
+    expect(sockets).toHaveLength(3);
+    socket().onclose?.({ code: 1006 });
+
+    client.ensureConnected(1499);
+    expect(sockets).toHaveLength(3);
+
+    client.ensureConnected(1500);
+    expect(sockets).toHaveLength(4);
+  });
+
+  it('caps the backoff so a returning OBS is picked up quickly', () => {
+    // Twenty failures in a row is a couple of minutes with OBS closed. Left
+    // uncapped, the delay would be measured in days by then.
+    const { client, socket, sockets } = setup();
+    client.connect();
+
+    let now = 0;
+    for (let i = 0; i < 20; i++) {
+      socket().onclose?.({ code: 1006 });
+      now += RETRY_MAX_MS;
+      client.ensureConnected(now);
+    }
+    const opened = sockets.length;
+    socket().onclose?.({ code: 1006 });
+
+    client.ensureConnected(now + RETRY_MAX_MS - 1);
+    expect(sockets).toHaveLength(opened);
+
+    client.ensureConnected(now + RETRY_MAX_MS);
+    expect(sockets).toHaveLength(opened + 1);
+  });
+
+  it('retries at once when the password changes', () => {
+    // connect() carries new credentials. Making it wait out a backoff earned by
+    // the wrong password would look like the new one was refused too.
+    const { client, socket, sockets } = setup();
+    client.connect();
+    socket().onclose?.({ code: 1006 });
+    client.ensureConnected(0);
+    socket().onclose?.({ code: 1006 });
+
+    client.ensureConnected(1);
+    expect(sockets).toHaveLength(2);
+
+    client.connect();
+
+    expect(sockets).toHaveLength(3);
+  });
+
+  it('starts over from zero after a connection that worked', () => {
+    const { client, socket, sockets } = setup();
+    client.connect();
+    socket().onclose?.({ code: 1006 });
+    client.ensureConnected(0);
+    socket().receive(HELLO_NO_AUTH);
+    socket().receive({ op: 2, d: {} });
+    socket().onclose?.({ code: 1006 });
+
+    client.ensureConnected(1);
+
+    expect(sockets).toHaveLength(3);
+  });
+
+  it('never retries a refused password', () => {
+    const { client, socket, sockets } = setup();
+    client.connect();
+    socket().receive(HELLO_AUTH);
+    socket().onclose?.({ code: 4009 });
+
+    client.ensureConnected(10_000);
+
+    expect(sockets).toHaveLength(1);
+  });
+});
+
+describe('createObsClient — telling the two failures apart', () => {
+  it('reports a server that never answered as unreachable', () => {
+    const { client, socket } = setup();
+    client.connect();
+    socket().onclose?.({ code: 1006 });
+
+    expect(client.status).toBe('unreachable');
+  });
+
+  it('reports a connection that worked and then dropped as disconnected', () => {
+    // The two call for different actions: one says "turn the WebSocket server
+    // on", the other says "OBS went away". A single word cannot say both.
+    const { client, socket } = setup();
+    client.connect();
+    socket().receive(HELLO_NO_AUTH);
+    socket().receive({ op: 2, d: {} });
+    socket().onclose?.({ code: 1006 });
+
+    expect(client.status).toBe('disconnected');
+  });
+
+  it('reports an error raised after identification as disconnected', () => {
+    // onerror fires before onclose when OBS is killed. Left to say
+    // "unreachable", it wins the race and the right status never shows.
+    const { client, socket } = setup();
+    client.connect();
+    socket().receive(HELLO_NO_AUTH);
+    socket().receive({ op: 2, d: {} });
+    socket().onerror?.();
+
+    expect(client.status).toBe('disconnected');
+  });
+
+  it('goes back to unreachable when the retry fails to reach OBS again', () => {
+    const { client, socket } = setup();
+    client.connect();
+    socket().receive(HELLO_NO_AUTH);
+    socket().receive({ op: 2, d: {} });
+    socket().onclose?.({ code: 1006 });
+
+    client.ensureConnected(1);
+    socket().onclose?.({ code: 1006 });
+
+    expect(client.status).toBe('unreachable');
   });
 });

@@ -61,6 +61,19 @@ describe('createCaptureSession', () => {
 
     expect(ensureConnected).toHaveBeenCalled();
   });
+
+  it('hands the report timestamp over, so the retries can be spaced out', () => {
+    const ensureConnected = vi.fn();
+    const session = createCaptureSession({
+      obs: { broadcast: vi.fn(), ensureConnected } as never,
+      onKeys: () => {},
+      onAnomaly: () => {},
+    });
+
+    session.handleReport(report(entry(1, 0x04, 10, 0x00)), 1234);
+
+    expect(ensureConnected).toHaveBeenCalledWith(1234);
+  });
 });
 
 describe('createCaptureSession — throughput', () => {

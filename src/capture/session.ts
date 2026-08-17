@@ -32,8 +32,9 @@ export function createCaptureSession(options: CaptureSessionOptions): CaptureSes
       // component as the overlay without the network in between.
       options.onKeys(keys);
       // OBS connection recovery driven by keyboard events: immune to the
-      // throttling of background timers (spec §10).
-      options.obs.ensureConnected();
+      // throttling of background timers (spec §10). The report timestamp is
+      // what the client spaces its retries out on.
+      options.obs.ensureConnected(timestamp);
 
       if (emitter.push(keys, timestamp) !== null) {
         options.obs.broadcast({ v: 1, t: 'frame', k: keys });

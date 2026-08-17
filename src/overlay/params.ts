@@ -1,9 +1,6 @@
-import { DEFAULT_OBS_PORT } from '../transport/obs';
+import { DEFAULT_OBS_PORT, normalizePort } from '../transport/obs';
 
 export { DEFAULT_OBS_PORT };
-
-/** Highest port number a TCP URL can carry. Beyond it, `new WebSocket` throws. */
-const MAX_PORT = 65535;
 
 /**
  * The overlay connects to obs-websocket as an ordinary client: it needs the
@@ -28,11 +25,8 @@ export function readOverlayParams(
   const fromQuery = new URLSearchParams(search);
   const fromHash = new URLSearchParams(hash.replace(/^#/, ''));
 
-  const rawPort = Number.parseInt(fromHash.get('port') ?? fromQuery.get('port') ?? '', 10);
-  const validPort = Number.isFinite(rawPort) && rawPort > 0 && rawPort <= MAX_PORT;
-
   return {
-    port: validPort ? rawPort : DEFAULT_OBS_PORT,
+    port: normalizePort(fromHash.get('port') ?? fromQuery.get('port')),
     password: fromHash.get('password') ?? '',
   };
 }

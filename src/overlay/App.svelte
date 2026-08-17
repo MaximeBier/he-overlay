@@ -23,7 +23,9 @@
   // The beat doubles as a presence signal for the capture page, which counts
   // the connected overlays.
   setInterval(() => {
-    obs.ensureConnected();
+    // Same clock as the WebHID report timestamps the capture page feeds in:
+    // both are measured from `performance.timeOrigin`.
+    obs.ensureConnected(performance.now());
     obs.broadcast({ v: 1, t: 'beat' });
   }, 2000);
 

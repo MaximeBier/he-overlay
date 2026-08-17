@@ -1,15 +1,46 @@
 import { computeAuth } from './auth';
 import { envelope, parseMessage, type OverlayMessage } from '../protocol/messages';
 
-export type ObsStatus = 'idle' | 'connecting' | 'identified' | 'auth-failed' | 'unreachable';
+/**
+ * `unreachable` and `disconnected` are both failures, and deliberately not the
+ * same one: the first means OBS never answered — its WebSocket server is off,
+ * or the browser is holding back local network access — while the second means
+ * a working connection went away. The status bar has to say what to do, and
+ * those are two different things to do (spec §11).
+ */
+export type ObsStatus =
+  | 'idle'
+  | 'connecting'
+  | 'identified'
+  | 'auth-failed'
+  | 'unreachable'
+  | 'disconnected';
 
 /** Port obs-websocket listens on out of the box. Configurable in OBS (spec §6.1). */
 export const DEFAULT_OBS_PORT = 4455;
+/** Highest port number a TCP URL can carry. Beyond it, `new WebSocket` throws. */
+export const MAX_PORT = 65535;
+
+/** Delay before the first retry. It doubles with every failure that follows. */
+export const RETRY_BASE_MS = 500;
+/**
+ * Ceiling on the backoff. Five seconds is the compromise: it divides the retry
+ * traffic by two hundred and fifty against no spacing at all, and it is still
+ * short enough that reopening OBS feels like it just reconnects.
+ */
+export const RETRY_MAX_MS = 5000;
 
 /** obs-websocket 5.x close code for a refused authentication. */
 const AUTH_FAILED_CODE = 4009;
 /** EventSubscription.General: contains CustomEvent. */
 const GENERAL_EVENTS = 1;
+
+/** Falls back to the default rather than build a URL the constructor rejects. */
+export function normalizePort(value: unknown): number {
+  const port = typeof value === 'string' ? Number.parseInt(value, 10) : value;
+  if (typeof port !== 'number' || !Number.isInteger(port)) return DEFAULT_OBS_PORT;
+  return port > 0 && port <= MAX_PORT ? port : DEFAULT_OBS_PORT;
+}
 
 export interface SocketLike {
   send(data: string): void;
@@ -31,9 +62,17 @@ export interface ObsClientOptions {
 }
 
 export interface ObsClient {
+  /** Opens now, clearing any backoff: the caller carries new credentials. */
   connect(): void;
-  /** Reopens when the socket is closed. Timer-free: called on events only. */
-  ensureConnected(): void;
+  /**
+   * Reopens when the socket is closed, no more often than the backoff allows.
+   *
+   * `now` is the timestamp of the keyboard report that triggered the call. The
+   * spacing is measured on those, never on a timer: a background tab throttles
+   * timers to one minute, which would make the retry stop happening exactly
+   * when the overlay is live and the page is not being looked at (spec §2.2).
+   */
+  ensureConnected(now: number): void;
   broadcast(message: OverlayMessage): void;
   close(): void;
   readonly status: ObsStatus;
@@ -58,6 +97,21 @@ export function createObsClient(options: ObsClientOptions): ObsClient {
 
   let socket: SocketLike | null = null;
   let status: ObsStatus = 'idle';
+  /** True once this socket got its Identified: separates the two failures. */
+  let identified = false;
+  /** Failed attempts in a row. Sets the backoff, cleared by any success. */
+  let attempts = 0;
+  let lastAttemptAt = Number.NEGATIVE_INFINITY;
+
+  function retryDelay() {
+    if (attempts === 0) return 0;
+    return Math.min(RETRY_BASE_MS * 2 ** (attempts - 1), RETRY_MAX_MS);
+  }
+
+  /** What a socket going away means, depending on how far it got. */
+  function lostConnection(): ObsStatus {
+    return identified ? 'disconnected' : 'unreachable';
+  }
 
   function setStatus(next: ObsStatus) {
     if (status === next) return;
@@ -126,6 +180,8 @@ export function createObsClient(options: ObsClientOptions): ObsClient {
       return;
     }
     if (payload.op === 2) {
+      identified = true;
+      attempts = 0;
       setStatus('identified');
       return;
     }
@@ -145,9 +201,10 @@ export function createObsClient(options: ObsClientOptions): ObsClient {
     setStatus(reason);
   }
 
-  function connect() {
+  function openSocket() {
     if (socket) return;
     setStatus('connecting');
+    identified = false;
 
     let next: SocketLike;
     try {
@@ -170,23 +227,34 @@ export function createObsClient(options: ObsClientOptions): ObsClient {
     };
     next.onerror = () => {
       if (socket !== next) return;
-      setStatus('unreachable');
+      // onerror fires before onclose when OBS is killed. Reporting the generic
+      // failure here would win the race and hide the accurate one.
+      setStatus(lostConnection());
     };
     next.onclose = (event) => {
       if (socket !== next) return;
       socket = null;
-      setStatus(event?.code === AUTH_FAILED_CODE ? 'auth-failed' : 'unreachable');
+      setStatus(event?.code === AUTH_FAILED_CODE ? 'auth-failed' : lostConnection());
     };
   }
 
   return {
-    connect,
-    ensureConnected() {
+    connect() {
+      attempts = 0;
+      lastAttemptAt = Number.NEGATIVE_INFINITY;
+      openSocket();
+    },
+    ensureConnected(now) {
       // A refused password will be refused again: retrying on every report
       // would hammer OBS ~50 times a second for nothing. Only an explicit
       // connect(), carrying a new password, clears this.
       if (status === 'auth-failed') return;
-      if (!socket) connect();
+      if (socket) return;
+      if (now - lastAttemptAt < retryDelay()) return;
+
+      lastAttemptAt = now;
+      attempts += 1;
+      openSocket();
     },
     broadcast(message) {
       if (status !== 'identified') return;
