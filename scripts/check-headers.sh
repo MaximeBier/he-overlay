@@ -37,6 +37,17 @@ else
   fail "the CSP does not allow ws://localhost:* — the OBS connection would be blocked"
 fi
 
+# The app issues no HTTP request of its own once loaded: its only network flow
+# is the loopback WebSocket. Leaving 'self' in connect-src would hand any script
+# that manages to run in the page a POST channel to our origin — where a request
+# body appears in no access log. Adding a fetch() later must be a decision, not
+# an accident, so this probe fails on its return.
+if grep -qiE "connect-src[^;]*'self'" <<<"$headers"; then
+  fail "connect-src allows 'self' — an exfiltration channel the app never uses"
+else
+  ok "connect-src is limited to the loopback"
+fi
+
 # That directive rewrites ws:// into wss://, and obs-websocket speaks no TLS.
 if grep -qi 'upgrade-insecure-requests' <<<"$headers"; then
   fail "upgrade-insecure-requests would rewrite ws:// into wss://"
