@@ -3,9 +3,21 @@
 The application is a static build served by nginx. There is no server to run, no
 database, no state: the container serves three HTML pages and their assets.
 
-Image: `ghcr.io/maximebier/he-overlay:latest`, `linux/amd64`, published by GitHub
-Actions on every push to `main`. It listens on **8080** as an unprivileged user
-and exposes **`/healthz`**.
+Image: `ghcr.io/maximebier/he-overlay:latest`, `linux/amd64`. It listens on
+**8080** as an unprivileged user and exposes **`/healthz`**.
+
+**`latest` moves on a version tag only**, never on a push to `main`. Pushes
+publish a `sha-…` tag and nothing else. This matters when Watchtower — or
+anything else following `latest` — redeploys on its own: pushing a commit does
+not reach production, tagging a release does. It keeps one human decision on the
+path between a commit and a live overlay, which is the only thing standing
+between a compromised push and the OBS password of every viewer of that page.
+
+To pin a known version instead of tracking `latest`:
+
+```yaml
+image: ghcr.io/maximebier/he-overlay:0.1.2
+```
 
 ## Deploy behind Traefik
 
@@ -70,8 +82,15 @@ path alive for anyone copying an old URL.
 The port may also be passed as `?port=`: it is not a secret, and seeing it in
 the logs helps diagnose. The fragment wins if both are present.
 
-The access log is scrubbed of query strings as well (`log_format no-query`), so
-that a password typed into one by mistake is not filed anyway.
+**This image** keeps query strings out of its own access log (`log_format
+no-query`). That guarantee stops at the container: a reverse proxy in front of
+it logs the request path with its query string, and Traefik does so by default.
+If you host this behind a proxy, either disable its access log for this router
+or accept that a query string typed by mistake is recorded upstream of us.
+
+There is nothing to configure in the image for that, and no middleware can be
+asked to fix it — which is precisely why the password is not read from a query
+string at all.
 
 The password remains visible in the OBS source properties, which is assumed and
 documented — but that is the streamer's own screen, not our server.
