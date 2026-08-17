@@ -1,7 +1,6 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
   import { createKeyboardLink, type KeyboardStatus } from '../keyboard/device';
-  import { createObsClient, type ObsStatus } from '../transport/obs';
+  import { createObsClient, type ObsClient, type ObsStatus } from '../transport/obs';
   import { createCaptureSession } from './session';
   import type { FrameKey } from '../protocol/messages';
 
@@ -11,19 +10,29 @@
   let port = $state(4455);
   let password = $state('');
 
-  // Built once with the initial port and password: in this proof of concept,
-  // changing either field means reloading the page. Proper reconnection lands
-  // in task 10. `untrack` states that capturing the initial value is the
-  // intent here, not an oversight.
-  const obs = createObsClient({
-    url: `ws://localhost:${untrack(() => port)}`,
-    password: untrack(() => password),
-    onStatus: (s) => (obsStatus = s),
-    onMessage: () => {},
-  });
+  // The client is built on click, never on mount: the port and the password
+  // are only known once they have been typed. Building it upfront would freeze
+  // an empty password and make authentication impossible to satisfy.
+  let obs: ObsClient | null = null;
+
+  function connect() {
+    obs?.close();
+    obs = createObsClient({
+      url: `ws://localhost:${port}`,
+      password,
+      onStatus: (s) => (obsStatus = s),
+      onMessage: () => {},
+    });
+    obs.connect();
+  }
 
   const session = createCaptureSession({
-    obs,
+    // Indirection through the current client: the session outlives any single
+    // connection, and keeps working across a port or password change.
+    obs: {
+      broadcast: (message) => obs?.broadcast(message),
+      ensureConnected: () => obs?.ensureConnected(),
+    },
     onKeys: (k) => (keys = k),
     onAnomaly: (a) => console.warn('decode anomaly', a),
   });
@@ -46,7 +55,7 @@
   <p>OBS: {obsStatus}</p>
   <label>Port <input type="number" bind:value={port} /></label>
   <label>Password <input type="password" bind:value={password} /></label>
-  <button onclick={() => obs.connect()}>Connect to OBS</button>
+  <button onclick={connect}>Connect to OBS</button>
 
   <ul>
     {#each keys as [id, travel, active] (id)}

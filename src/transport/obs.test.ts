@@ -7,7 +7,7 @@ class FakeSocket implements SocketLike {
   sent: string[] = [];
   closed = false;
   onopen: (() => void) | null = null;
-  onclose: ((code?: number) => void) | null = null;
+  onclose: ((event: { code?: number }) => void) | null = null;
   onerror: (() => void) | null = null;
   onmessage: ((event: { data: string }) => void) | null = null;
 
@@ -16,7 +16,8 @@ class FakeSocket implements SocketLike {
   }
   close() {
     this.closed = true;
-    this.onclose?.();
+    // A browser CloseEvent, like the real one: 1000 is a normal closure.
+    this.onclose?.({ code: 1000 });
   }
   receive(payload: unknown) {
     this.onmessage?.({ data: JSON.stringify(payload) });
@@ -96,12 +97,14 @@ describe('createObsClient', () => {
 
   it('tells a refused password apart from an unreachable server', () => {
     // 4009 = AuthenticationFailed. obs-websocket sends no message back:
-    // it closes the socket with that code.
+    // it closes the socket with that code. The browser hands that code over
+    // inside a CloseEvent object, never as a bare number — reading it wrong
+    // would report every refused password as an unreachable server.
     const refused = setup();
     refused.client.connect();
     refused.socket().onopen?.();
     refused.socket().receive(HELLO_AUTH);
-    refused.socket().onclose?.(4009);
+    refused.socket().onclose?.({ code: 4009 });
 
     expect(refused.client.status).toBe('auth-failed');
 
@@ -170,7 +173,7 @@ describe('createObsClient', () => {
   it('ensureConnected reopens after a close', () => {
     const { client, socket, sockets } = setup();
     client.connect();
-    socket().onclose?.();
+    socket().onclose?.({ code: 1000 });
 
     client.ensureConnected();
 

@@ -12,7 +12,9 @@ export interface SocketLike {
   send(data: string): void;
   close(): void;
   onopen: (() => void) | null;
-  onclose: ((code?: number) => void) | null;
+  /** Receives a CloseEvent, exactly like the browser API: the code is a field
+   * of the event, never an argument of its own. */
+  onclose: ((event: { code?: number }) => void) | null;
   onerror: (() => void) | null;
   onmessage: ((event: { data: string }) => void) | null;
 }
@@ -97,9 +99,9 @@ export function createObsClient(options: ObsClientOptions): ObsClient {
     next.onopen = () => {};
     next.onmessage = (event) => handle(event.data);
     next.onerror = () => setStatus('unreachable');
-    next.onclose = (code) => {
+    next.onclose = (event) => {
       socket = null;
-      setStatus(code === AUTH_FAILED_CODE ? 'auth-failed' : 'unreachable');
+      setStatus(event?.code === AUTH_FAILED_CODE ? 'auth-failed' : 'unreachable');
     };
   }
 
