@@ -1,0 +1,24 @@
+# Example deployment, versioned with the code so that the Traefik configuration
+# and the served headers never drift apart.
+#
+# Replace `letsencrypt` with the name of the certificate resolver in place, and
+# `traefik` with the name of the Traefik network if it differs.
+services:
+  he-overlay:
+    image: ghcr.io/maximebier/he-overlay:latest
+    container_name: he-overlay
+    restart: unless-stopped
+    networks: [traefik]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik
+      - traefik.http.routers.he-overlay.rule=Host(`he-overlay.wardensquad.fr`)
+      - traefik.http.routers.he-overlay.entrypoints=websecure
+      - traefik.http.routers.he-overlay.tls.certresolver=letsencrypt
+      - traefik.http.services.he-overlay.loadbalancer.server.port=8080
+      - traefik.http.services.he-overlay.loadbalancer.healthcheck.path=/healthz
+      - traefik.http.services.he-overlay.loadbalancer.healthcheck.interval=30s
+
+networks:
+  traefik:
+    external: true
