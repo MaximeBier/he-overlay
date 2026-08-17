@@ -50,21 +50,28 @@ Expected: **one** `content-security-policy` line, containing `ws://localhost:*`.
 
 ## The OBS password goes in the fragment
 
-The browser source URL looks like this:
+The browser source URL:
 
 ```
-https://he-overlay.wardensquad.fr/overlay.html#port=4455&password=<password>
+https://he-overlay.wardensquad.fr/overlay.html#password=<password>
 ```
 
 Note the `#`, not `?`. **A fragment is never sent to the server** — that is a
 property of HTTP, not a setting — so the password stays on the streamer's
 machine. A query string, by contrast, arrives verbatim in this host's access
-log: serving the page would mean collecting our users' OBS credentials without
+log: accepting one would mean collecting our users' OBS credentials without
 anyone having decided to.
 
-The query string is still read, so sources configured the old way keep working,
-and the access log is scrubbed of query strings for exactly that reason
-(`log_format no-query`). Both are transitional; the fragment is the real fix.
+**A password in the query string is ignored.** Not read, not honoured — the
+overlay simply connects without one. Keeping it working would keep the leaking
+path alive for anyone copying an old URL.
+
+`#port=` is only needed if obs-websocket was moved off its default port, 4455.
+The port may also be passed as `?port=`: it is not a secret, and seeing it in
+the logs helps diagnose. The fragment wins if both are present.
+
+The access log is scrubbed of query strings as well (`log_format no-query`), so
+that a password typed into one by mistake is not filed anyway.
 
 The password remains visible in the OBS source properties, which is assumed and
 documented — but that is the streamer's own screen, not our server.
