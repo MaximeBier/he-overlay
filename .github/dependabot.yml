@@ -1,0 +1,14 @@
+version: 2
+updates:
+  # Actions are pinned to commit SHAs in image.yml, which stops a reassigned tag
+  # from reaching a job that holds packages: write — but a pin left alone is a
+  # version frozen forever. Dependabot raises them, with the release notes.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly

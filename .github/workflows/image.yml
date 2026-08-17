@@ -18,9 +18,13 @@ jobs:
       packages: write
 
     steps:
-      - uses: actions/checkout@v4
+      # Third-party actions are pinned to a commit SHA, not to a tag. A `vN` tag
+      # is reassignable by its owner, and these steps hold a token with
+      # packages: write — the tj-actions/changed-files compromise of March 2025
+      # followed exactly that path. Dependabot raises the pins.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
@@ -28,47 +32,58 @@ jobs:
       - run: npm test
       - run: npm run check
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
-      # Built locally first: we push nothing we have not probed.
-      - name: Build for verification
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          load: true
-          tags: he-overlay:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Verify served headers
-        run: ./scripts/check-headers.sh
-
+      # Computed before the build so its labels land in the image we verify —
+      # the very image that gets pushed.
+      #
+      # `latest` is published on a version tag only, never on a push to main.
+      # Watchtower follows `latest` and redeploys within minutes, so this is the
+      # one place where a human decision still stands between a commit and
+      # production. Pushes to main publish `sha-…` and nothing else.
       - id: meta
-        if: github.event_name != 'pull_request'
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha,format=short
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+
+      # Built once, into the local daemon. Nothing is pushed before it has been
+      # probed, and what gets pushed is this exact image — not a rebuild that
+      # merely shares a cache.
+      - name: Build for verification
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: he-overlay:ci
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify served headers
+        run: ./scripts/check-headers.sh
 
       - if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # The cache makes this second pass near instant: it is the same image,
-      # retagged for the registry.
-      - if: github.event_name != 'pull_request'
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          platforms: linux/amd64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
+      # Retagging the verified image, so the digest that reaches the registry is
+      # the digest that passed check-headers.sh.
+      - name: Push the verified image
+        if: github.event_name != 'pull_request'
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          echo "$TAGS" | while read -r tag; do
+            [ -z "$tag" ] && continue
+            docker tag he-overlay:ci "$tag"
+            docker push "$tag"
+          done
