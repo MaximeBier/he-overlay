@@ -22,6 +22,31 @@ describe('protocol envelope', () => {
     expect(parseMessage({ heOverlay: { v: 1, t: 'yolo' } })).toBeNull();
   });
 
+  // Any obs-websocket client can emit a CustomEvent, so this is a trust
+  // boundary, not our own input. A frame without `k` would set the overlay's
+  // key list to undefined, and the very next render would throw — killing the
+  // overlay for the rest of the stream.
+  it('rejects a malformed frame instead of trusting its shape', () => {
+    expect(parseMessage({ heOverlay: { v: 1, t: 'frame' } })).toBeNull();
+    expect(parseMessage({ heOverlay: { v: 1, t: 'frame', k: 'nope' } })).toBeNull();
+    expect(parseMessage({ heOverlay: { v: 1, t: 'frame', k: [[174, 996]] } })).toBeNull();
+    expect(parseMessage({ heOverlay: { v: 1, t: 'frame', k: [[174, 996, 7]] } })).toBeNull();
+    expect(parseMessage({ heOverlay: { v: 1, t: 'frame', k: [['a', 996, 1]] } })).toBeNull();
+  });
+
+  it('accepts an empty frame: every key released is a legitimate frame', () => {
+    expect(parseMessage({ heOverlay: { v: 1, t: 'frame', k: [] } })).toEqual({
+      v: 1,
+      t: 'frame',
+      k: [],
+    });
+  });
+
+  it('rejects a config message that carries no object', () => {
+    expect(parseMessage({ heOverlay: { v: 1, t: 'config' } })).toBeNull();
+    expect(parseMessage({ heOverlay: { v: 1, t: 'config', config: 'nope' } })).toBeNull();
+  });
+
   it('ignores a foreign payload', () => {
     expect(parseMessage({ someOtherApp: { hello: true } })).toBeNull();
     expect(parseMessage(null)).toBeNull();
