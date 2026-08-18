@@ -1,3 +1,5 @@
+import { OVERLAY_TOKENS } from '../styles/tokens';
+
 export const CONFIG_VERSION = 1;
 
 export type KeyMode = 'key' | 'axis';
@@ -122,15 +124,16 @@ export const STYLE_KEYS = Object.keys(INHERITABLE) as readonly (keyof KeyStyle)[
  * placeholders.
  */
 export const DEFAULT_STYLE: GlobalStyle = {
-  restColor: '#151823',
-  borderColor: '#232838',
-  activeColor: '#7C9EFF',
-  fillColor: '#3D4A78',
+  restColor: OVERLAY_TOKENS.keyRest,
+  borderColor: OVERLAY_TOKENS.keyBorder,
+  activeColor: OVERLAY_TOKENS.keyActive,
+  fillColor: OVERLAY_TOKENS.keyFill,
   fillDirection: 'up',
-  opacity: 1,
-  radius: 5,
-  fontFamily: "'Archivo', system-ui, sans-serif",
-  fontWeight: 700,
+  opacity: OVERLAY_TOKENS.keyOpacity,
+  radius: OVERLAY_TOKENS.keyRadius,
+  fontFamily: OVERLAY_TOKENS.keyFontFamily,
+  fontWeight: OVERLAY_TOKENS.keyFontWeight,
+  // Layout dimensions rather than graphic choices, and the user sets them.
   unit: 56,
   gap: 6,
 };

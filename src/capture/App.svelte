@@ -171,14 +171,14 @@
 
 <style>
   main {
-    font: 14px system-ui;
+    font: var(--he-font);
     padding: 0.75rem;
     display: grid;
     gap: 0.5rem;
     justify-items: start;
   }
   .warning {
-    color: #b58900;
+    color: var(--he-override);
     margin: 0;
   }
   input[readonly] {

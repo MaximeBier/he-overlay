@@ -2,6 +2,7 @@
   import type { KeyboardStatus } from '../keyboard/device';
   import type { ObsStatus } from '../transport/obs';
   import { keyboardHint, obsHint } from './settings';
+  import { UI_TOKENS } from '../styles/tokens';
 
   let {
     keyboard,
@@ -17,7 +18,7 @@
 
   // Permanent, never modal (spec §11): a dialog would have to be dismissed,
   // and what is wrong is exactly what one needs to keep seeing.
-  const dot = (ok: boolean) => (ok ? '#3ba55d' : '#d83c3e');
+  const dot = (ok: boolean) => (ok ? UI_TOKENS.ok : UI_TOKENS.danger);
 </script>
 
 <header>
@@ -39,10 +40,10 @@
     gap: 0.75rem;
     align-items: center;
     flex-wrap: wrap;
-    font: 14px system-ui;
+    font: var(--he-font);
     padding: 0.5rem 0.75rem;
-    background: #1e1f22;
-    color: #f2f3f5;
+    background: var(--he-surface);
+    color: var(--he-text);
   }
   .pill {
     display: inline-flex;

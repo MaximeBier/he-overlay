@@ -1,0 +1,22 @@
+/*
+ * Page-level ground for the capture interface. Never imported by the overlay,
+ * whose background must stay transparent.
+ *
+ * The two literal fallbacks are the anti-flash: `applyTokens` sets the
+ * variables from JavaScript, which runs after this stylesheet has already
+ * painted. Without them the page shows white for one frame before turning
+ * dark. They are the only place a token value is written twice, and they exist
+ * for that single frame.
+ */
+:root {
+  /* Native controls, scrollbars and form fields follow the dark palette
+     instead of standing out as white rectangles. */
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background: var(--he-bg, #0e1015);
+  color: var(--he-text, #dde1e9);
+  font: var(--he-font);
+}
