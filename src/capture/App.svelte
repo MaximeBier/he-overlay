@@ -126,6 +126,12 @@
     },
     onKeys: (k) => {
       frame = k;
+      if (import.meta.env.DEV) {
+        const dev = (globalThis as Record<string, unknown>).heOverlayDev as {
+          onFrame?: ((keys: readonly FrameKey[]) => void) | null;
+        };
+        dev?.onFrame?.(k);
+      }
       rate = session.rate;
       // Expiry is computed on read, so an overlay that went away only stops
       // being counted once something asks. Without this it would linger until
@@ -149,6 +155,11 @@
    * milestone 4. `import.meta.env.DEV` is statically false in a build, so this
    * whole block is dropped from the bundle OBS loads.
    *
+   * `onFrame` covers what the preview cannot: matrix indices are specific to
+   * each keyboard, and replacing the old `<li>{id}: {travel}</li>` list with
+   * the shared view removed the only place they were visible. The diagnostics
+   * panel of task 26 is where this belongs for good.
+   *
    * To be removed at task 17, when JSON import makes it pointless.
    */
   if (import.meta.env.DEV) {
@@ -160,6 +171,11 @@
         config = next;
         broadcaster.publish(config);
       },
+      get frame() {
+        return frame;
+      },
+      /** Called on every decoded report, before the emitter throttles anything. */
+      onFrame: null as ((keys: readonly FrameKey[]) => void) | null,
     };
   }
 
