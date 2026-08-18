@@ -168,7 +168,9 @@ describe('migrate - the per-key style is not a safe place either', () => {
     });
 
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.config.keys[0]?.style).toEqual({});
+    // Absent, not empty: nothing survived, so the key carries no override at
+    // all — which is what an export should show.
+    if (result.ok) expect(result.config.keys[0]?.style).toBeUndefined();
   });
 
   it('keeps a per-key override that is well formed', () => {
@@ -194,7 +196,7 @@ describe('migrate - the per-key style is not a safe place either', () => {
     });
 
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.config.keys[0]?.style).toEqual({});
+    if (result.ok) expect(result.config.keys[0]?.style).toBeUndefined();
   });
 
   it('accepts only hex colors, which are the ones the renderer can read', () => {

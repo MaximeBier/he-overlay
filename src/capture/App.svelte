@@ -13,7 +13,8 @@
   import { createOverlayRegistry } from './overlays';
   import { createConfigBroadcaster } from './broadcast';
   import { resolve } from '../config/resolve';
-  import { defaultConfig } from '../config/schema';
+  import { loadConfig, saveConfig, exportConfig, importConfig } from '../config/storage';
+  import type { OverlayConfig } from '../config/schema';
   import KeyboardView from '../view/KeyboardView.svelte';
   import StatusBar from './StatusBar.svelte';
   import type { DecodeAnomaly } from '../keyboard/decode';
@@ -25,9 +26,10 @@
   let keyboardStatus = $state<KeyboardStatus>('disconnected');
   let obsStatus = $state<ObsStatus>('idle');
   let frame = $state<readonly FrameKey[]>([]);
-  // The editing configuration. Still only settable from the console until the
-  // learning flow of milestone 4 fills it in.
-  let config = $state(defaultConfig());
+  const stored = loadConfig(storage);
+  let config = $state(stored.config);
+  /** What to say about the configuration: a load problem, or an import result. */
+  let notice = $state(configNotice(stored.problem, stored.dropped));
   // Resolved once per change rather than once per frame: the preview and the
   // overlay must be handed the very same shape (spec §5.2).
   let resolved = $derived(resolve(config));
@@ -104,6 +106,61 @@
   }
 
   /**
+   * The one door every configuration change goes through — learning, moving,
+   * styling, mode. Persisting without broadcasting, or the reverse, is the
+   * failure this shape makes unwritable.
+   */
+  function updateConfig(next: OverlayConfig) {
+    config = next;
+    saveConfig(storage, config);
+    broadcaster.publish(config);
+  }
+
+  function configNotice(problem: 'unreadable' | 'too-new' | null, dropped: number): string | null {
+    if (problem === 'unreadable') {
+      return 'Your saved configuration could not be read. Starting from the defaults — importing a profile will replace them.';
+    }
+    if (problem === 'too-new') {
+      return 'Your saved configuration was written by a newer version of HE Overlay. Starting from the defaults rather than guessing at it.';
+    }
+    if (dropped > 0) {
+      return `${dropped} key${dropped === 1 ? '' : 's'} could not be read and ${dropped === 1 ? 'was' : 'were'} left out.`;
+    }
+    return null;
+  }
+
+  function downloadProfile() {
+    const blob = new Blob([exportConfig(config)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = Object.assign(document.createElement('a'), {
+      href: url,
+      download: 'he-overlay.json',
+    });
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function uploadProfile(event: Event & { currentTarget: HTMLInputElement }) {
+    // Held before the await: the DOM clears `currentTarget` once the dispatch
+    // ends, so reading it afterwards throws.
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    const result = importConfig(await file.text());
+    // Cleared either way, or picking the same file twice in a row fires
+    // nothing — which is exactly what someone does after fixing it by hand.
+    input.value = '';
+
+    if (!result.ok) {
+      notice = configNotice(result.reason, 0);
+      return;
+    }
+    updateConfig(result.config);
+    notice = configNotice(null, result.dropped) ?? 'Profile imported.';
+  }
+
+  /**
    * One warning per anomaly kind and per session. A wrong assumption about
    * report length would otherwise emit `bad-length` on every single report —
    * hundreds a second, enough to lock up the devtools. The readable log is
@@ -126,12 +183,7 @@
     },
     onKeys: (k) => {
       frame = k;
-      if (import.meta.env.DEV) {
-        const dev = (globalThis as Record<string, unknown>).heOverlayDev as {
-          onFrame?: ((keys: readonly FrameKey[]) => void) | null;
-        };
-        dev?.onFrame?.(k);
-      }
+      if (import.meta.env.DEV) devDoor.onFrame?.(k);
       rate = session.rate;
       // Expiry is computed on read, so an overlay that went away only stops
       // being counted once something asks. Without this it would linger until
@@ -150,33 +202,31 @@
   /**
    * Development-only door onto the editing configuration.
    *
-   * The default configuration is empty and nothing else can fill it yet, so
-   * without this there is no way to see the shared view render at all before
-   * milestone 4. `import.meta.env.DEV` is statically false in a build, so this
-   * whole block is dropped from the bundle OBS loads.
+   * Kept until task 20 brings key learning, not removed at task 17 as the plan
+   * said: JSON import only replaces this once a configuration can be *created*
+   * some other way, and until then a file has to come from somewhere. `onFrame`
+   * is how matrix indices are found at all — they differ per keyboard, and the
+   * shared view replaced the list that used to show them.
    *
-   * `onFrame` covers what the preview cannot: matrix indices are specific to
-   * each keyboard, and replacing the old `<li>{id}: {travel}</li>` list with
-   * the shared view removed the only place they were visible. The diagnostics
-   * panel of task 26 is where this belongs for good.
-   *
-   * To be removed at task 17, when JSON import makes it pointless.
+   * `import.meta.env.DEV` is statically false in a build, so none of this
+   * reaches the bundle OBS loads.
    */
+  const devDoor = {
+    get config() {
+      return config;
+    },
+    set config(next: OverlayConfig) {
+      updateConfig(next);
+    },
+    get frame() {
+      return frame;
+    },
+    /** Called on every decoded report, before the emitter throttles anything. */
+    onFrame: null as ((keys: readonly FrameKey[]) => void) | null,
+  };
+
   if (import.meta.env.DEV) {
-    (globalThis as Record<string, unknown>).heOverlayDev = {
-      get config() {
-        return config;
-      },
-      set config(next: typeof config) {
-        config = next;
-        broadcaster.publish(config);
-      },
-      get frame() {
-        return frame;
-      },
-      /** Called on every decoded report, before the emitter throttles anything. */
-      onFrame: null as ((keys: readonly FrameKey[]) => void) | null,
-    };
+    (globalThis as Record<string, unknown>).heOverlayDev = devDoor;
   }
 
   // Nothing to do on switching the machine on (spec §10): a keyboard already
@@ -211,6 +261,18 @@
     <input readonly value={url} />
   </label>
 
+  <div class="profile">
+    <button onclick={downloadProfile}>Export profile</button>
+    <label>
+      Import profile
+      <input type="file" accept="application/json" onchange={uploadProfile} />
+    </label>
+  </div>
+
+  {#if notice}
+    <p class="notice" role="status">{notice}</p>
+  {/if}
+
   <!-- The same component OBS renders, from the same resolved shape. The
        default configuration is empty, so nothing shows until milestone 4
        teaches the first key. -->
@@ -229,6 +291,16 @@
   }
   .warning {
     color: var(--he-override);
+    margin: 0;
+  }
+  .profile {
+    display: flex;
+    gap: var(--he-space, 0.5rem);
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .notice {
+    color: var(--he-override, #d9a05b);
     margin: 0;
   }
   .preview {

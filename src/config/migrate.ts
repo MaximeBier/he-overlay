@@ -142,7 +142,13 @@ export function migrate(raw: unknown): MigrationResult {
   // A malformed key is dropped: better to lose one key than to break the
   // rendering of all the others.
   const keys = byUniqueId(
-    submitted.filter(isKeyConfig).map((key) => ({ ...key, style: knownKeyStyle(key.style) })),
+    submitted.filter(isKeyConfig).map((key) => {
+      const style = knownKeyStyle(key.style);
+      // Absent rather than empty: a key with no override should come back out
+      // of an export exactly as it went in, and `{}` on every key is noise in
+      // a file people open and read.
+      return Object.keys(style).length > 0 ? { ...key, style } : { ...key, style: undefined };
+    }),
   );
 
   return {
