@@ -154,3 +154,100 @@ describe('migrate — a hostile file is still just a file', () => {
     if (result.ok) expect(JSON.stringify(result.config.style)).not.toContain('glow');
   });
 });
+
+describe('migrate - the per-key style is not a safe place either', () => {
+  // Found by the milestone 3 review. The chain is complete: an unvalidated
+  // per-key style reaches effectiveStyle, contrastingLabel calls trim() on a
+  // number, and the overlay stops rendering inside a $derived.
+  it('drops a per-key override that is not the right type', () => {
+    const result = migrate({
+      version: 1,
+      layout: 'iso',
+      style: {},
+      keys: [{ ...aKey, style: { restColor: 42, opacity: 'half' } }],
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.config.keys[0]?.style).toEqual({});
+  });
+
+  it('keeps a per-key override that is well formed', () => {
+    const result = migrate({
+      version: 1,
+      layout: 'iso',
+      style: {},
+      keys: [{ ...aKey, style: { activeColor: '#ff0000', opacity: 0.5 } }],
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.config.keys[0]?.style).toEqual({ activeColor: '#ff0000', opacity: 0.5 });
+    }
+  });
+
+  it('lets no key carry the two global-only sizes', () => {
+    const result = migrate({
+      version: 1,
+      layout: 'iso',
+      style: {},
+      keys: [{ ...aKey, style: { unit: 72, gap: 2 } }],
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.config.keys[0]?.style).toEqual({});
+  });
+
+  it('accepts only hex colors, which are the ones the renderer can read', () => {
+    // `luminance` understands #rgb and #rrggbb, nothing else, and falls back to
+    // the light label — white text on a white key.
+    const result = migrate({
+      version: 1,
+      layout: 'iso',
+      keys: [],
+      style: { restColor: 'white', activeColor: 'rgb(255,0,0)', fillColor: '#f0a' },
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.config.style.restColor).toBe(DEFAULT_STYLE.restColor);
+      expect(result.config.style.activeColor).toBe(DEFAULT_STYLE.activeColor);
+      expect(result.config.style.fillColor).toBe('#f0a');
+    }
+  });
+
+  it('refuses a unit that would collapse or invert the scene', () => {
+    // unit 0 gives an empty SVG, a negative unit an invalid width attribute
+    // that browsers discard outright: a blank overlay, on air, silently.
+    for (const unit of [0, -56]) {
+      const result = migrate({ version: 1, layout: 'iso', keys: [], style: { unit } });
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.config.style.unit).toBe(DEFAULT_STYLE.unit);
+    }
+  });
+
+  it('refuses a negative gap, which inflates every key past its cell', () => {
+    const result = migrate({ version: 1, layout: 'iso', keys: [], style: { gap: -10 } });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.config.style.gap).toBe(DEFAULT_STYLE.gap);
+  });
+
+  it('accepts a gap of zero, which is a legitimate look', () => {
+    const result = migrate({ version: 1, layout: 'iso', keys: [], style: { gap: 0 } });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.config.style.gap).toBe(0);
+  });
+
+  it('drops a key placed outside the frame the viewBox draws', () => {
+    const result = migrate({
+      version: 1,
+      layout: 'iso',
+      style: {},
+      keys: [{ ...aKey, x: -1 }],
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.config.keys).toEqual([]);
+  });
+});

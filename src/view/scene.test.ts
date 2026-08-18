@@ -218,3 +218,35 @@ describe('label contrast', () => {
     expect(active.keys[0]?.labelFill).toBe(OVERLAY_TOKENS.keyLabelInverted);
   });
 });
+
+describe('buildScene - defence in depth on values the type system cannot police', () => {
+  it('treats a travel that is not a number as no travel at all', () => {
+    // parseMessage now refuses these, but the scene is also fed straight from
+    // the capture page, and a NaN reaches the SVG as height="NaN".
+    const scene = buildScene(config(key()), [[174, Number.NaN, 0]]);
+
+    expect(scene.keys[0]?.fill.h).toBe(0);
+  });
+
+  it('falls back to filling upward on a direction outside the four', () => {
+    // The switch is exhaustive over the type, which protects the code and not
+    // the data: an unknown direction returned undefined, the spread dropped
+    // x/y/w/h, and the key silently stopped showing its travel forever.
+    const scene = buildScene(
+      config(key({ style: { ...style, fillDirection: 'diagonal' as never } })),
+      [[174, 1023, 0]],
+    );
+
+    expect(scene.keys[0]?.fill).toMatchObject({ x: 5, y: 5, w: 90, h: 90 });
+  });
+
+  it('draws a duplicated id once, keeping the first', () => {
+    // migrate dedupes the imported path; nothing dedupes the wire. parseMessage
+    // validates a config message as "an object" and no further, so two equal
+    // ids kill the keyed each block in KeyboardView.
+    const scene = buildScene(config(key({ label: 'Q' }), key({ label: 'W', x: 3 })), []);
+
+    expect(scene.keys).toHaveLength(1);
+    expect(scene.keys[0]?.label).toBe('Q');
+  });
+});

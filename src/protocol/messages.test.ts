@@ -71,3 +71,19 @@ describe('protocol envelope', () => {
     expect(parseMessage('hello')).toBeNull();
   });
 });
+
+describe('a frame is numbers the renderer will divide by', () => {
+  // Shape was hardened in milestone 1, finiteness was not. NaN survives the
+  // scene's clamp — Math.min(1, Math.max(0, NaN)) is NaN — and reaches the SVG
+  // as height="NaN".
+  it('rejects a travel that is not a finite number', () => {
+    expect(parseMessage({ heOverlay: { v: 1, t: 'frame', k: [[1, Number.NaN, 0]] } })).toBeNull();
+    expect(
+      parseMessage({ heOverlay: { v: 1, t: 'frame', k: [[1, Number.POSITIVE_INFINITY, 0]] } }),
+    ).toBeNull();
+  });
+
+  it('rejects an identifier that is not a finite number', () => {
+    expect(parseMessage({ heOverlay: { v: 1, t: 'frame', k: [[Number.NaN, 10, 0]] } })).toBeNull();
+  });
+});

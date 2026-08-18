@@ -89,7 +89,12 @@ function fillRect(
       return { x, y, w: w * ratio, h };
     case 'left':
       return { x: x + w - w * ratio, y, w: w * ratio, h };
+    // `up` is also the fallback: the switch is exhaustive over the type,
+    // which protects the code and not the data. An unknown direction returned
+    // undefined, the spread then dropped x/y/w/h, and that key stopped showing
+    // its travel for good — without an error anywhere.
     case 'up':
+    default:
       return { x, y: y + h - h * ratio, w, h: h * ratio };
   }
 }
@@ -101,13 +106,25 @@ export function buildScene(config: ResolvedConfig, frame: readonly FrameKey[]): 
   let width = 0;
   let height = 0;
 
-  const keys = config.keys.map((key): SceneKey => {
+  // Deduplicated here rather than only on import: a config message crossing
+  // obs-websocket is validated as "an object" and no further, so two equal ids
+  // would kill the keyed each block that draws them.
+  const drawn = new Set<number>();
+  const unique = config.keys.filter((key) => {
+    if (drawn.has(key.id)) return false;
+    drawn.add(key.id);
+    return true;
+  });
+
+  const keys = unique.map((key): SceneKey => {
     // A key missing from the frame means zero travel and inactive (spec 7.3).
     const state = states.get(key.id) ?? { travel: 0, active: 0 as const };
     // Clamped, because the frame crosses obs-websocket and anyone
     // authenticated on it can speak. A ratio above one draws a fill several
     // times the key height, over its neighbours.
-    const ratio = Math.min(1, Math.max(0, state.travel / MAX_TRAVEL));
+    const ratio = Number.isFinite(state.travel)
+      ? Math.min(1, Math.max(0, state.travel / MAX_TRAVEL))
+      : 0;
 
     const x = key.x * unit + gap / 2;
     const y = key.y * unit + gap / 2;

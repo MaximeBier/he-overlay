@@ -39,7 +39,10 @@ export function envelope(message: OverlayMessage): { heOverlay: OverlayMessage }
 function isFrameKey(value: unknown): value is FrameKey {
   if (!Array.isArray(value) || value.length !== 3) return false;
   const [id, travel, active] = value;
-  return typeof id === 'number' && typeof travel === 'number' && (active === 0 || active === 1);
+  // Finite, not merely numeric. NaN survives every clamp downstream — it is
+  // neither greater nor smaller than anything — and lands in the SVG as
+  // height="NaN", which silently removes the key from the render.
+  return Number.isFinite(id) && Number.isFinite(travel) && (active === 0 || active === 1);
 }
 
 /**
