@@ -1,6 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createObsClient } from './obs';
 import { createOverlayRegistry } from '../capture/overlays';
+import { defaultConfig } from '../config/schema';
+import { resolve } from '../config/resolve';
+import { buildScene } from '../view/scene';
 import type { OverlayMessage } from '../protocol/messages';
 import { FakeSocket } from '../test/fixtures';
 
@@ -47,27 +50,27 @@ class FakeServer {
   }
 }
 
-describe('capture to overlay round trip', () => {
-  function spawn(server: FakeServer, onMessage: (m: OverlayMessage) => void) {
-    return createObsClient({
-      url: 'ws://localhost:4455',
-      password: '',
-      onStatus: () => {},
-      onMessage,
-      socketFactory: () => {
-        const socket = new FakeSocket();
-        server.attach(socket);
-        return socket;
-      },
-    });
-  }
+function spawnClient(server: FakeServer, onMessage: (m: OverlayMessage) => void) {
+  return createObsClient({
+    url: 'ws://localhost:4455',
+    password: '',
+    onStatus: () => {},
+    onMessage,
+    socketFactory: () => {
+      const socket = new FakeSocket();
+      server.attach(socket);
+      return socket;
+    },
+  });
+}
 
+describe('capture to overlay round trip', () => {
   it('delivers a frame broadcast by the capture to the overlay', async () => {
     const server = new FakeServer();
     const received: OverlayMessage[] = [];
 
-    const capture = spawn(server, () => {});
-    const overlay = spawn(server, (m) => received.push(m));
+    const capture = spawnClient(server, () => {});
+    const overlay = spawnClient(server, (m) => received.push(m));
     capture.connect();
     overlay.connect();
 
@@ -86,11 +89,11 @@ describe('capture to overlay round trip', () => {
     const server = new FakeServer();
     const registry = createOverlayRegistry();
 
-    const capture = spawn(server, (m) => {
+    const capture = spawnClient(server, (m) => {
       if (m.t === 'hello' || m.t === 'beat') registry.seen(m.id, 1000);
     });
-    const first = spawn(server, () => {});
-    const second = spawn(server, () => {});
+    const first = spawnClient(server, () => {});
+    const second = spawnClient(server, () => {});
     capture.connect();
     first.connect();
     second.connect();
@@ -111,11 +114,11 @@ describe('capture to overlay round trip', () => {
     const server = new FakeServer();
     const registry = createOverlayRegistry();
 
-    const capture = spawn(server, (m) => {
+    const capture = spawnClient(server, (m) => {
       if (m.t === 'hello' || m.t === 'beat') registry.seen(m.id, 1000);
       if (m.t === 'bye') registry.forget(m.id);
     });
-    const overlay = spawn(server, () => {});
+    const overlay = spawnClient(server, () => {});
     capture.connect();
     overlay.connect();
 
@@ -128,5 +131,55 @@ describe('capture to overlay round trip', () => {
     overlay.broadcast({ v: 1, t: 'hello', id: 'run-final' });
 
     expect(registry.count(1000)).toBe(1);
+  });
+});
+
+describe('capture to overlay round trip - the configuration', () => {
+  it('delivers a resolved configuration the overlay can render', async () => {
+    const server = new FakeServer();
+    const received: OverlayMessage[] = [];
+
+    const capture = spawnClient(server, () => {});
+    const overlay = spawnClient(server, (m) => received.push(m));
+    capture.connect();
+    overlay.connect();
+    await vi.waitFor(() => expect(overlay.status).toBe('identified'));
+
+    const config = defaultConfig();
+    config.keys.push({
+      id: 174,
+      usage: 0x50,
+      mode: 'key',
+      label: 'Q',
+      x: 0,
+      y: 0,
+      w: 1,
+      h: 1,
+      style: { activeColor: '#ff0000' },
+    });
+    capture.broadcast({ v: 1, t: 'config', config: resolve(config) });
+
+    const delivered = received.find((m) => m.t === 'config');
+    if (delivered?.t !== 'config') throw new Error('the configuration never arrived');
+
+    // Survived parseMessage, which now validates the whole shape.
+    expect(buildScene(delivered.config, []).keys).toHaveLength(1);
+  });
+
+  it('drops a configuration message that would break the render', async () => {
+    // Any client authenticated on the same obs-websocket can emit under our
+    // key. Before validation, `keys: 'nope'` reached buildScene and threw.
+    const server = new FakeServer();
+    const received: OverlayMessage[] = [];
+
+    const attacker = spawnClient(server, () => {});
+    const overlay = spawnClient(server, (m) => received.push(m));
+    attacker.connect();
+    overlay.connect();
+    await vi.waitFor(() => expect(overlay.status).toBe('identified'));
+
+    attacker.broadcast({ v: 1, t: 'config', config: { keys: 'nope' } as never });
+
+    expect(received.some((m) => m.t === 'config')).toBe(false);
   });
 });

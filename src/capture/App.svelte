@@ -11,6 +11,10 @@
   import { createCaptureSession } from './session';
   import { loadSettings, saveSettings, overlayUrl, browserStorage } from './settings';
   import { createOverlayRegistry } from './overlays';
+  import { createConfigBroadcaster } from './broadcast';
+  import { resolve } from '../config/resolve';
+  import { defaultConfig } from '../config/schema';
+  import KeyboardView from '../view/KeyboardView.svelte';
   import StatusBar from './StatusBar.svelte';
   import type { DecodeAnomaly } from '../keyboard/decode';
   import type { FrameKey } from '../protocol/messages';
@@ -20,7 +24,13 @@
   let settings = $state(loadSettings(storage));
   let keyboardStatus = $state<KeyboardStatus>('disconnected');
   let obsStatus = $state<ObsStatus>('idle');
-  let keys = $state<FrameKey[]>([]);
+  let frame = $state<readonly FrameKey[]>([]);
+  // The editing configuration. Still only settable from the console until the
+  // learning flow of milestone 4 fills it in.
+  let config = $state(defaultConfig());
+  // Resolved once per change rather than once per frame: the preview and the
+  // overlay must be handed the very same shape (spec §5.2).
+  let resolved = $derived(resolve(config));
   let rate = $state(0);
   let overlayCount = $state(0);
 
@@ -43,6 +53,9 @@
       password: untrack(() => settings.password),
       onStatus: (s) => {
         obsStatus = s;
+        // Nothing left while the socket was down, and an overlay on the other
+        // side may have been waiting the whole time.
+        if (s === 'identified') broadcaster.onIdentified();
         if (s !== 'identified') {
           // Nobody is reachable through a dead socket, and expiry is only
           // computed on read: a count left standing would never come down.
@@ -56,27 +69,25 @@
         }
       },
       onMessage: (message) => {
-        // The capture page discards config and frame: those are its own
-        // messages (spec §6).
-        if (message.t === 'hello') {
-          // Spec §6: this reply is why the overlay speaks at all. A fresh
-          // overlay holds nothing, and the emitter would otherwise deduplicate
-          // its way to a blank page until the next keystroke.
-          session.resend(performance.now());
-        }
-        if (message.t === 'hello' || message.t === 'beat') {
-          overlays.seen(message.id, performance.now());
-          refreshOverlays();
-        }
-        if (message.t === 'bye') {
-          overlays.forget(message.id);
-          refreshOverlays();
-        }
+        // Presence and configuration are both driven by these three messages,
+        // so one place reads them (spec §6).
+        broadcaster.onOverlayMessage(message, performance.now());
+        // Spec §6: a fresh overlay holds nothing, and the emitter would
+        // otherwise deduplicate its way to a blank page until the next
+        // keystroke.
+        if (message.t === 'hello') session.resend(performance.now());
+        refreshOverlays();
       },
     });
   }
 
   let obs: ObsClient = createClient();
+
+  const broadcaster = createConfigBroadcaster({
+    obs: { broadcast: (message) => obs.broadcast(message) },
+    current: () => config,
+    registry: overlays,
+  });
 
   /**
    * Credentials are persisted and the client rebuilt, never patched: url and
@@ -114,7 +125,7 @@
       ensureConnected: (now) => obs.ensureConnected(now),
     },
     onKeys: (k) => {
-      keys = k;
+      frame = k;
       rate = session.rate;
       // Expiry is computed on read, so an overlay that went away only stops
       // being counted once something asks. Without this it would linger until
@@ -129,6 +140,28 @@
     onReport: (data, timestamp) => session.handleReport(data, timestamp),
     onStatus: (s) => (keyboardStatus = s),
   });
+
+  /**
+   * Development-only door onto the editing configuration.
+   *
+   * The default configuration is empty and nothing else can fill it yet, so
+   * without this there is no way to see the shared view render at all before
+   * milestone 4. `import.meta.env.DEV` is statically false in a build, so this
+   * whole block is dropped from the bundle OBS loads.
+   *
+   * To be removed at task 17, when JSON import makes it pointless.
+   */
+  if (import.meta.env.DEV) {
+    (globalThis as Record<string, unknown>).heOverlayDev = {
+      get config() {
+        return config;
+      },
+      set config(next: typeof config) {
+        config = next;
+        broadcaster.publish(config);
+      },
+    };
+  }
 
   // Nothing to do on switching the machine on (spec §10): a keyboard already
   // authorised resumes without a gesture, and the credentials come from the
@@ -162,11 +195,12 @@
     <input readonly value={url} />
   </label>
 
-  <ul>
-    {#each keys as [id, travel, active] (id)}
-      <li>{id}: {travel} {active ? '●' : '○'}</li>
-    {/each}
-  </ul>
+  <!-- The same component OBS renders, from the same resolved shape. The
+       default configuration is empty, so nothing shows until milestone 4
+       teaches the first key. -->
+  <section class="preview">
+    <KeyboardView config={resolved} {frame} />
+  </section>
 </main>
 
 <style>
@@ -180,6 +214,13 @@
   .warning {
     color: var(--he-override);
     margin: 0;
+  }
+  .preview {
+    background: var(--he-stage, #0b0d11);
+    border-radius: var(--he-radius, 4px);
+    padding: var(--he-space, 0.5rem);
+    min-height: 4rem;
+    align-self: stretch;
   }
   input[readonly] {
     min-width: 32rem;

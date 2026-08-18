@@ -2,7 +2,7 @@
   import type { KeyboardStatus } from '../keyboard/device';
   import type { ObsStatus } from '../transport/obs';
   import { keyboardHint, obsHint } from './settings';
-  import { UI_TOKENS } from '../styles/tokens';
+  import { UI_TOKENS } from '../styles/ui-tokens';
 
   let {
     keyboard,

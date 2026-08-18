@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { OVERLAY_TOKENS, UI_TOKENS, applyTokens, cssVariables } from './tokens';
+import { OVERLAY_TOKENS } from './tokens';
+import { UI_TOKENS, applyTokens, cssVariables } from './ui-tokens';
 import { DEFAULT_STYLE } from '../config/schema';
 
 describe('tokens', () => {
@@ -68,5 +69,17 @@ describe('tokens', () => {
 
     expect(names).toHaveLength(Object.keys(UI_TOKENS).length);
     expect(new Set(names).size).toBe(names.length);
+  });
+});
+
+describe('the two palettes live in separate modules', () => {
+  // Not merely separate objects. The overlay imports the configuration schema,
+  // which imports the broadcast tokens: sharing one module drags the whole
+  // interface palette into the chunk OBS keeps loaded (spec §5.1). Bundlers
+  // split by module, so the separation has to be physical to hold.
+  it('exports nothing but the broadcast tokens from tokens.ts', async () => {
+    const broadcast = await import('./tokens');
+
+    expect(Object.keys(broadcast)).toEqual(['OVERLAY_TOKENS']);
   });
 });

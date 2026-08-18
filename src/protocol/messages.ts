@@ -1,3 +1,6 @@
+import { isResolvedConfig } from '../config/validate';
+import type { ResolvedConfig } from '../config/schema';
+
 export const PROTOCOL_VERSION = 1;
 
 /** [matrix index, travel 0..1023, actuation]. `active` is always transmitted. */
@@ -18,7 +21,7 @@ export type BeatMessage = { v: typeof PROTOCOL_VERSION; t: 'beat'; id: string };
  * warning — a crash, or OBS being killed.
  */
 export type ByeMessage = { v: typeof PROTOCOL_VERSION; t: 'bye'; id: string };
-export type ConfigMessage = { v: typeof PROTOCOL_VERSION; t: 'config'; config: unknown };
+export type ConfigMessage = { v: typeof PROTOCOL_VERSION; t: 'config'; config: ResolvedConfig };
 export type FrameMessage = { v: typeof PROTOCOL_VERSION; t: 'frame'; k: FrameKey[] };
 
 export type OverlayMessage =
@@ -71,8 +74,12 @@ export function parseMessage(payload: unknown): OverlayMessage | null {
 
   if (t === 'config') {
     const { config } = inner as { config?: unknown };
-    // `unknown` until task 13 defines ResolvedConfig — but an object at least.
-    if (typeof config !== 'object' || config === null) return null;
+    // Fully checked, not merely "an object". The plan argued both sides are
+    // built from the same repository — true of the sender we intend, and
+    // nothing to do with the channel. `buildScene` reads `keys.filter` and
+    // `style.radius` without a fallback, so a config shaped wrong takes the
+    // overlay down for the rest of the stream.
+    if (!isResolvedConfig(config)) return null;
   }
 
   if (PRESENCE_TYPES.includes(t)) {

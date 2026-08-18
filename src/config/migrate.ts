@@ -7,6 +7,7 @@ import {
   type LayoutOverride,
   type OverlayConfig,
 } from './schema';
+import { isExtent, isPosition } from './validate';
 
 export type MigrationResult =
   /**
@@ -39,20 +40,6 @@ const COLOR_KEYS: readonly string[] = Object.keys(DEFAULT_STYLE).filter((name) =
 /** Sizes that belong to the global style and that no key may carry. */
 const GLOBAL_ONLY: readonly (keyof GlobalStyle)[] = ['unit', 'gap'];
 const GLOBAL_STYLE_KEYS = Object.keys(DEFAULT_STYLE) as readonly (keyof GlobalStyle)[];
-
-/** Geometry has to be drawable, and JSON is happy to hand over Infinity. */
-function isExtent(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0;
-}
-
-/**
- * Positions are non-negative: the scene draws its viewBox from the origin, so
- * a key at `x: -1` is rendered outside the frame and never appears — with
- * nothing to explain its absence.
- */
-function isPosition(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
-}
 
 /**
  * Keeps the style properties we know, at the type we expect.

@@ -2,12 +2,17 @@
   import { createObsClient } from '../transport/obs';
   import { readOverlayParams } from './params';
   import { newOverlayId } from './identity';
+  import KeyboardView from '../view/KeyboardView.svelte';
   import type { FrameKey } from '../protocol/messages';
+  import type { ResolvedConfig } from '../config/schema';
 
+  // The hash matters: the password is read from the fragment only, so that it
+  // never reaches the access log of whoever hosts this page.
   const { port, password } = readOverlayParams(location.search, location.hash);
   const id = newOverlayId();
 
-  let keys = $state<FrameKey[]>([]);
+  let config = $state<ResolvedConfig | null>(null);
+  let frame = $state<readonly FrameKey[]>([]);
 
   const obs = createObsClient({
     url: `ws://localhost:${port}`,
@@ -20,8 +25,10 @@
       if (status === 'identified') obs.broadcast({ v: 1, t: 'hello', id });
     },
     onMessage: (message) => {
-      // The overlay discards hello and beat: those are its own messages (spec §6).
-      if (message.t === 'frame') keys = message.k;
+      // The overlay discards hello, beat and bye: those are its own messages
+      // (spec §6).
+      if (message.t === 'config') config = message.config;
+      else if (message.t === 'frame') frame = message.k;
     },
   });
 
@@ -43,30 +50,13 @@
   // it also fires when the page is frozen into the back/forward cache, and it
   // is the event browsers actually guarantee.
   addEventListener('pagehide', () => obs.broadcast({ v: 1, t: 'bye', id }));
-
-  const WIDTH = 60;
-  const HEIGHT = 160;
-  const GAP = 8;
 </script>
 
-<svg
-  width={keys.length * (WIDTH + GAP)}
-  height={HEIGHT}
-  viewBox={`0 0 ${keys.length * (WIDTH + GAP)} ${HEIGHT}`}
->
-  <!-- `keyId`, not `id`: the overlay's own identifier is in scope here, and
-       shadowing it would hand any future use of it the matrix index instead. -->
-  {#each keys as [keyId, travel, active], i (keyId)}
-    <g transform={`translate(${i * (WIDTH + GAP)}, 0)`}>
-      <rect width={WIDTH} height={HEIGHT} rx="8" fill={active ? '#3ba55d' : '#202225'} />
-      <rect
-        y={HEIGHT - (travel / 1023) * HEIGHT}
-        width={WIDTH}
-        height={(travel / 1023) * HEIGHT}
-        rx="8"
-        fill="#ffffff"
-        opacity="0.35"
-      />
-    </g>
-  {/each}
-</svg>
+<!--
+  Nothing is drawn until the capture has sent a configuration (spec §14). That
+  is a choice, not an oversight: it removes any cache on the overlay side, and
+  with it the question of when to invalidate one.
+-->
+{#if config}
+  <KeyboardView {config} {frame} />
+{/if}
