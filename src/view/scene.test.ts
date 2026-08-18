@@ -250,3 +250,40 @@ describe('buildScene - defence in depth on values the type system cannot police'
     expect(scene.keys[0]?.label).toBe('Q');
   });
 });
+
+describe('the contrast crossover is derived, not borrowed', () => {
+  // 0.179 is the crossover for pure black against pure white. Our two label
+  // tokens are neither, so the constant was imported from a different problem
+  // and left a band where the code picked the worse of the two.
+  const luminanceOf = (hex: string) => {
+    const channels = [1, 3, 5].map((offset) => {
+      const value = Number.parseInt(hex.slice(offset, offset + 2), 16) / 255;
+      return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * channels[0]! + 0.7152 * channels[1]! + 0.0722 * channels[2]!;
+  };
+  const contrast = (a: number, b: number) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+
+  it('always picks the label that contrasts best with the background', () => {
+    const light = luminanceOf(OVERLAY_TOKENS.keyLabel);
+    const dark = luminanceOf(OVERLAY_TOKENS.keyLabelInverted);
+
+    for (let step = 0; step <= 255; step++) {
+      const grey = `#${step.toString(16).padStart(2, '0').repeat(3)}`;
+      const background = luminanceOf(grey);
+      const chosen = contrastingLabel(grey);
+      const chosenLuminance = chosen === OVERLAY_TOKENS.keyLabel ? light : dark;
+      const other = chosen === OVERLAY_TOKENS.keyLabel ? dark : light;
+
+      expect(contrast(chosenLuminance, background)).toBeGreaterThanOrEqual(
+        contrast(other, background) - 1e-9,
+      );
+    }
+  });
+
+  it('follows the tokens rather than a hard-coded number', () => {
+    // The band the borrowed constant got wrong: L between 0.1602 and 0.179.
+    // #707070 sits inside it at L = 0.1620, and used to get the light label.
+    expect(contrastingLabel('#707070')).toBe(OVERLAY_TOKENS.keyLabelInverted);
+  });
+});

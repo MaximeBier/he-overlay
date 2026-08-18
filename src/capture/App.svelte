@@ -171,7 +171,7 @@
 
 <style>
   main {
-    font: var(--he-font);
+    font: var(--he-font, 400 14px system-ui, sans-serif);
     padding: 0.75rem;
     display: grid;
     gap: 0.5rem;

@@ -8,7 +8,7 @@ describe('migrate', () => {
   it('accepts a configuration that is already up to date', () => {
     const config = defaultConfig();
 
-    expect(migrate(config)).toEqual({ ok: true, config });
+    expect(migrate(config)).toEqual({ ok: true, config, dropped: 0 });
   });
 
   it('migrates a configuration that has no version number', () => {
@@ -249,5 +249,40 @@ describe('migrate - the per-key style is not a safe place either', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.config.keys).toEqual([]);
+  });
+});
+
+describe('migrate - what it silently threw away', () => {
+  // The comment justifies dropping a malformed key over breaking the render,
+  // but nothing told the user. They import a profile and get an amputated
+  // keyboard. Spec 11: say what to do, never fail in silence.
+  it('counts the keys it had to drop', () => {
+    const result = migrate({
+      version: 1,
+      layout: 'iso',
+      style: {},
+      keys: [aKey, { id: 9 }, { ...aKey, label: 'dup' }, { ...aKey, id: 3, w: -1 }],
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.config.keys).toHaveLength(1);
+      expect(result.dropped).toBe(3);
+    }
+  });
+
+  it('reports nothing dropped when the file is clean', () => {
+    const result = migrate({ version: 1, layout: 'iso', style: {}, keys: [aKey] });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.dropped).toBe(0);
+  });
+
+  it('validates the key list after migrating, not before', () => {
+    // Checked ahead of the chain, no future migration could ever create or
+    // rename this field — the step would run and its result be refused.
+    const result = migrate({ keys: [aKey], style: {} });
+
+    expect(result.ok).toBe(true);
   });
 });

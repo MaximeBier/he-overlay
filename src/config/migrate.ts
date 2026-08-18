@@ -9,7 +9,14 @@ import {
 } from './schema';
 
 export type MigrationResult =
-  { ok: true; config: OverlayConfig } | { ok: false; reason: 'unreadable' | 'too-new' };
+  /**
+   * `dropped` counts the keys the file lost on the way in — malformed, or a
+   * duplicate of one already kept. Losing a key beats breaking the render, but
+   * the user has to be told: importing a profile and quietly getting an
+   * amputated keyboard is the silent failure spec §11 rules out.
+   */
+  | { ok: true; config: OverlayConfig; dropped: number }
+  | { ok: false; reason: 'unreadable' | 'too-new' };
 
 type Loose = Record<string, unknown>;
 
@@ -131,7 +138,6 @@ export function migrate(raw: unknown): MigrationResult {
   const version = typeof config.version === 'number' ? config.version : 0;
 
   if (version > CONFIG_VERSION) return { ok: false, reason: 'too-new' };
-  if (!Array.isArray(config.keys)) return { ok: false, reason: 'unreadable' };
 
   for (let from = version; from < CONFIG_VERSION; from++) {
     const step = MIGRATIONS[from];
@@ -139,10 +145,22 @@ export function migrate(raw: unknown): MigrationResult {
     config = step(config);
   }
 
+  // After the chain, not before: checked ahead of it, no future migration
+  // could ever create or rename this field — the step would run and its own
+  // result be refused.
+  if (!Array.isArray(config.keys)) return { ok: false, reason: 'unreadable' };
+
   const override = config.layoutOverride;
+  const submitted = config.keys as unknown[];
+  // A malformed key is dropped: better to lose one key than to break the
+  // rendering of all the others.
+  const keys = byUniqueId(
+    submitted.filter(isKeyConfig).map((key) => ({ ...key, style: knownKeyStyle(key.style) })),
+  );
 
   return {
     ok: true,
+    dropped: submitted.length - keys.length,
     config: {
       version: CONFIG_VERSION,
       layout: config.layout === 'ansi' ? 'ansi' : 'iso',
@@ -150,13 +168,7 @@ export function migrate(raw: unknown): MigrationResult {
         ? (override as LayoutOverride)
         : 'auto',
       style: { ...DEFAULT_STYLE, ...knownStyle(config.style) },
-      // A malformed key is dropped: better to lose one key than to break the
-      // rendering of all the others.
-      keys: byUniqueId(
-        (config.keys as unknown[])
-          .filter(isKeyConfig)
-          .map((key) => ({ ...key, style: knownKeyStyle(key.style) })),
-      ),
+      keys,
     },
   };
 }

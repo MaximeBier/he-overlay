@@ -65,13 +65,33 @@ function luminance(hex: string): number | null {
 }
 
 /**
+ * Background luminance at which both labels contrast equally well.
+ *
+ * Derived from the two tokens rather than written down. The familiar 0.179 is
+ * the crossover for pure black against pure white, and ours are neither: with
+ * #DDE1E9 and #0E1015 the real crossover sits at 0.1603, so a borrowed
+ * constant left a band where the code picked the label that reads worse.
+ *
+ * WCAG contrast is (L1 + 0.05) / (L2 + 0.05), so the two are equal when the
+ * background luminance is the geometric mean of the offset endpoints.
+ */
+const LABEL_CROSSOVER = (() => {
+  const light = luminance(OVERLAY_TOKENS.keyLabel);
+  const dark = luminance(OVERLAY_TOKENS.keyLabelInverted);
+  // Only if a token stops being a hex colour, which the tests would catch
+  // first; the fallback keeps the old behaviour rather than throwing at import.
+  if (light === null || dark === null) return 0.179;
+  return Math.sqrt((light + 0.05) * (dark + 0.05)) - 0.05;
+})();
+
+/**
  * The fill moves under the text: a fixed label color would be unreadable half
  * the time. So it is computed, not a setting.
  */
 export function contrastingLabel(background: string): string {
   const value = luminance(background);
   if (value === null) return OVERLAY_TOKENS.keyLabel;
-  return value > 0.179 ? OVERLAY_TOKENS.keyLabelInverted : OVERLAY_TOKENS.keyLabel;
+  return value > LABEL_CROSSOVER ? OVERLAY_TOKENS.keyLabelInverted : OVERLAY_TOKENS.keyLabel;
 }
 
 function fillRect(
@@ -154,8 +174,12 @@ export function buildScene(config: ResolvedConfig, frame: readonly FrameKey[]): 
       baseFill,
       borderColor: key.style.borderColor,
       fill: { ...fillRect(x, y, w, h, ratio, key.style.fillDirection), color: fillColor },
-      // Whatever the direction, the fill covers the centre of the key - and
-      // therefore the text - exactly from half travel onward.
+      // Chosen from whichever colour covers most of the glyph. The label is
+      // centred and its band is symmetric, so in all four directions the two
+      // colours split it evenly at half travel — which makes 0.5 the balance
+      // point, not an approximation of one. It is not the moment the fill
+      // *covers* the text: with a glyph 0.4 of the key tall, the fill touches
+      // it at 0.3 and hides it at 0.7.
       labelFill: contrastingLabel(ratio >= 0.5 ? fillColor : baseFill),
       fontFamily: key.style.fontFamily,
       fontWeight: key.style.fontWeight,

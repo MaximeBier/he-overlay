@@ -40,7 +40,7 @@
     gap: 0.75rem;
     align-items: center;
     flex-wrap: wrap;
-    font: var(--he-font);
+    font: var(--he-font, 400 14px system-ui, sans-serif);
     padding: 0.5rem 0.75rem;
     background: var(--he-surface);
     color: var(--he-text);
