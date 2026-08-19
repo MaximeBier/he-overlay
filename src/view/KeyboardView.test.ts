@@ -104,16 +104,26 @@ describe('KeyboardView - what OBS sees and what the editor sees', () => {
     expect(second.container.innerHTML).toBe(html);
   });
 
-  it('renders preview and broadcast identically for the same inputs', () => {
-    // The whole point of the shared component (spec 5.2): were these two ever
-    // to differ, every style adjustment would be a guess.
-    const preview = render(KeyboardView, { props: { config, frame: [[174, 700, 1] as const] } });
-    const previewHtml = preview.container.innerHTML;
-    cleanup();
-    const broadcast = render(KeyboardView, {
-      props: { config, frame: [[174, 700, 1] as const], decorations: false },
-    });
+  it('adds decorations without touching anything the broadcast shows', () => {
+    // The whole point of the shared component (spec 5.2): were the editor and
+    // the broadcast ever to differ on fill, colour or geometry, every style
+    // adjustment would be a guess. Comparing the default against an explicit
+    // `decorations: false` proved nothing — both take the same branch. What
+    // has to hold is that turning it on adds the dashed border and the AXIS
+    // label, and changes nothing else.
+    const frame = [[174, 700, 1] as const];
 
-    expect(broadcast.container.innerHTML).toBe(previewHtml);
+    const plain = render(KeyboardView, { props: { config: axisConfig, frame } });
+    const broadcastHtml = plain.container.innerHTML;
+    cleanup();
+
+    const decorated = render(KeyboardView, {
+      props: { config: axisConfig, frame, decorations: true },
+    });
+    const stripped = decorated.container.innerHTML
+      .replace(/<text[^>]*>AXIS<[/]text>/, '')
+      .replace(/ stroke-dasharray="[^"]*"/, '');
+
+    expect(stripped).toBe(broadcastHtml);
   });
 });

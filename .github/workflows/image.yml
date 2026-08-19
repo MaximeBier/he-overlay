@@ -31,6 +31,12 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run check
+      - run: npm run build
+      # What the overlay actually downloads. Twice in milestone 3 a module
+      # shared between the two entry points dragged its whole file into the
+      # bundle OBS keeps loaded — a leak no unit test can see, because it
+      # happens in chunks and tests check modules.
+      - run: ./scripts/check-bundle.sh
 
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 

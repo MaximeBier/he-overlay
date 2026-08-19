@@ -1,4 +1,4 @@
-import { MAX_TRAVEL } from '../keyboard/decode';
+import { MAX_TRAVEL } from '../keyboard/analog-report';
 import { OVERLAY_TOKENS } from '../styles/tokens';
 import type { FillDirection, ResolvedConfig } from '../config/schema';
 import type { FrameKey } from '../protocol/messages';

@@ -252,7 +252,11 @@
    */
   const devDoor = {
     get config() {
-      return config;
+      // A snapshot, not the live proxy: mutating what comes out must never
+      // appear to work. Writing through the proxy repaints the preview without
+      // persisting or broadcasting, so the preview and the broadcast disagree
+      // — the one property this milestone exists to guarantee.
+      return $state.snapshot(config);
     },
     set config(next: OverlayConfig) {
       updateConfig(next);

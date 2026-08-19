@@ -313,3 +313,27 @@ describe('migrate - the bounds that stop just short', () => {
     if (result.ok) expect(result.config.style.radius).toBe(0);
   });
 });
+
+describe('migrate - a profile comes back normalised', () => {
+  it('drops key properties it has never heard of', () => {
+    // `pickStyle` filters the style, but the key object used to be spread
+    // wholesale: an unknown field survived into storage and out of the next
+    // export. Nothing reaches the wire — `resolve` picks its fields — but the
+    // profile is no longer canonical, and a large enough field pushes
+    // saveConfig into the quota failure it swallows.
+    const result = migrate({
+      version: 1,
+      layout: 'iso',
+      style: {},
+      keys: [{ ...aKey, glow: { radius: 40 }, legacyLabel: 'Q' }],
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(Object.keys(result.config.keys[0]!).sort()).toEqual(
+        ['h', 'id', 'label', 'mode', 'style', 'usage', 'w', 'x', 'y'].sort(),
+      );
+      expect(JSON.stringify(result.config)).not.toContain('glow');
+    }
+  });
+});

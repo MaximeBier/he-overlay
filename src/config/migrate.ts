@@ -129,10 +129,25 @@ export function migrate(raw: unknown): MigrationResult {
   const keys = byUniqueId(
     submitted.filter(isKeyConfig).map((key) => {
       const style = knownKeyStyle(key.style);
-      // Absent rather than empty: a key with no override should come back out
-      // of an export exactly as it went in, and `{}` on every key is noise in
-      // a file people open and read.
-      return Object.keys(style).length > 0 ? { ...key, style } : { ...key, style: undefined };
+      // Built from its known fields rather than spread, exactly as the style
+      // is: an unknown property spread in here survives into storage and out
+      // of the next export, leaving profiles that are not canonical and a
+      // saveConfig that can hit the quota it swallows in silence.
+      //
+      // Absent rather than empty style: a key with no override should come
+      // back out of an export exactly as it went in, and `{}` on every key is
+      // noise in a file people open and read.
+      return {
+        id: key.id,
+        usage: key.usage,
+        mode: key.mode,
+        label: key.label,
+        x: key.x,
+        y: key.y,
+        w: key.w,
+        h: key.h,
+        style: Object.keys(style).length > 0 ? style : undefined,
+      };
     }),
   );
 
