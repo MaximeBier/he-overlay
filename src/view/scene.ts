@@ -154,11 +154,17 @@ export function buildScene(config: ResolvedConfig, frame: readonly FrameKey[]): 
     const h = Math.max(0, key.h * unit - gap);
 
     // Axis mode never switches its background (spec 7.4): its active color
-    // serves as the fill color. In key mode the fill keeps its own color,
-    // otherwise it would vanish as soon as the background switches.
-    const fillColor = key.mode === 'axis' ? key.style.activeColor : key.style.fillColor;
-    const baseFill =
-      key.mode === 'key' && state.active === 1 ? key.style.activeColor : key.style.restColor;
+    // serves as the fill color, and nothing about it changes on actuation.
+    //
+    // Key mode swaps the two colors when the key fires. The fill is painted
+    // over the background, so putting the active color underneath hid it
+    // entirely on a fully pressed key — the one thing worth seeing, covered by
+    // the travel it came from. Swapping keeps the active color on top, where
+    // it grows with the press, while the travel stays readable against the
+    // fill color behind it.
+    const actuated = key.mode === 'key' && state.active === 1;
+    const fillColor = actuated || key.mode === 'axis' ? key.style.activeColor : key.style.fillColor;
+    const baseFill = actuated ? key.style.fillColor : key.style.restColor;
 
     width = Math.max(width, (key.x + key.w) * unit);
     height = Math.max(height, (key.y + key.h) * unit);

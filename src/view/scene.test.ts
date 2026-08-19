@@ -102,16 +102,36 @@ describe('buildScene', () => {
     expect(scene.keys[0]?.baseFill).toBe(style.restColor);
   });
 
-  it('switches the background of a key-mode key when it is active', () => {
-    const scene = buildScene(config(key()), [[174, 300, 1]]);
+  it('fills a released key-mode key with the fill color, over the rest color', () => {
+    const scene = buildScene(config(key()), [[174, 300, 0]]);
 
-    expect(scene.keys[0]?.baseFill).toBe(style.activeColor);
+    expect(scene.keys[0]?.baseFill).toBe(style.restColor);
+    expect(scene.keys[0]?.fill.color).toBe(style.fillColor);
   });
 
-  it('fills a key-mode key with the fill color', () => {
+  // The fill is drawn over the background, so a fully pressed key used to hide
+  // the active colour completely: the one thing that matters — this key just
+  // fired — was covered by the travel it fired from. On actuation the two
+  // colours swap roles instead.
+  it('swaps the two colours when a key-mode key actuates', () => {
     const scene = buildScene(config(key()), [[174, 300, 1]]);
 
-    expect(scene.keys[0]?.fill.color).toBe(style.fillColor);
+    expect(scene.keys[0]?.baseFill).toBe(style.fillColor);
+    expect(scene.keys[0]?.fill.color).toBe(style.activeColor);
+  });
+
+  it('turns a fully pressed key entirely into the active colour', () => {
+    const scene = buildScene(config(key()), [[174, 1023, 1]]);
+
+    expect(scene.keys[0]?.fill.color).toBe(style.activeColor);
+    expect(scene.keys[0]?.fill.h).toBe(90);
+  });
+
+  it('still shows how deep an actuated key is pressed', () => {
+    const half = buildScene(config(key()), [[174, 512, 1]]);
+
+    expect(half.keys[0]?.fill.h).toBeCloseTo(45.04, 1);
+    expect(half.keys[0]?.baseFill).not.toBe(half.keys[0]?.fill.color);
   });
 
   // Test 7 of spec 12.1 - axis mode receives the bit, it does not represent it.
@@ -212,10 +232,14 @@ describe('label contrast', () => {
     expect(high.keys[0]?.labelFill).toBe(OVERLAY_TOKENS.keyLabelInverted);
   });
 
-  it('inverts too when the key is actuated: the background turns light', () => {
-    const active = buildScene(config(key()), [[174, 300, 1]]);
+  it('inverts once the active colour reaches under the text', () => {
+    // Shallow actuation leaves the fill colour behind the label, which is
+    // dark; a deep one puts the active colour there, which is not.
+    const shallow = buildScene(config(key()), [[174, 300, 1]]);
+    const deep = buildScene(config(key()), [[174, 900, 1]]);
 
-    expect(active.keys[0]?.labelFill).toBe(OVERLAY_TOKENS.keyLabelInverted);
+    expect(shallow.keys[0]?.labelFill).toBe(OVERLAY_TOKENS.keyLabel);
+    expect(deep.keys[0]?.labelFill).toBe(OVERLAY_TOKENS.keyLabelInverted);
   });
 });
 

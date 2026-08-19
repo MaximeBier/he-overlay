@@ -48,12 +48,17 @@ describe('KeyboardView', () => {
     expect(rects[0]?.getAttribute('fill')).toBe('#111111');
   });
 
-  it('draws an active key with the active color and its label', () => {
+  it('draws a fully pressed active key entirely in the active color', () => {
+    // Background and fill both, because the fill covers the whole key: what
+    // the viewer sees is the active colour and nothing else.
     const { container, getByText } = render(KeyboardView, {
       props: { config, frame: [[174, 1023, 1] as const] },
     });
 
-    expect(container.querySelector('rect')?.getAttribute('fill')).toBe('#00ff00');
+    const rects = container.querySelectorAll('rect');
+    expect(rects[0]?.getAttribute('fill')).toBe('#ffffff'); // fill colour behind
+    expect(rects[1]?.getAttribute('fill')).toBe('#00ff00'); // active colour on top
+    expect(rects[1]?.getAttribute('height')).toBe('90');
     expect(getByText('Q')).toBeTruthy();
   });
 
