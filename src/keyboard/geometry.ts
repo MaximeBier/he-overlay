@@ -166,12 +166,33 @@ export function placeNewKey(
   const kept: Placement[] = existing.map(({ x, y }) => ({ x, y }));
   const geometry = BY_USAGE.get(usage);
 
-  // Anchor: the first placed key whose geometry we know.
-  const anchor = existing.find((key) => BY_USAGE.has(key.usage));
-  const anchorGeometry = anchor ? BY_USAGE.get(anchor.usage)! : null;
+  /**
+   * The placed key that sits closest to the new one **on the reference board**,
+   * not on screen.
+   *
+   * Anchoring on the first key learned only works while the whole board is
+   * being translated. Rearrange it — a tight WASD block in one corner, the
+   * arrows elsewhere — and a new key measured from a distant anchor lands
+   * nowhere near the group being worked on. The nearest neighbour follows the
+   * local arrangement instead, and on a row learned left to right the two rules
+   * agree, which is why the common case is unchanged.
+   */
+  let anchor: { key: { x: number; y: number }; geometry: KeyGeometry } | null = null;
+  if (geometry) {
+    let nearest = Number.POSITIVE_INFINITY;
+    for (const key of existing) {
+      const reference = BY_USAGE.get(key.usage);
+      if (!reference) continue;
+      const distance = Math.abs(reference.x - geometry.x) + Math.abs(reference.y - geometry.y);
+      if (distance < nearest) {
+        nearest = distance;
+        anchor = { key, geometry: reference };
+      }
+    }
+  }
 
   let placed: Placement;
-  if (!geometry || !anchor || !anchorGeometry) {
+  if (!geometry || !anchor) {
     // Unknown usage, or no reference at all: right of the set.
     placed =
       kept.length === 0
@@ -182,8 +203,8 @@ export function placeNewKey(
           };
   } else {
     placed = {
-      x: anchor.x + (geometry.x - anchorGeometry.x),
-      y: anchor.y + (geometry.y - anchorGeometry.y),
+      x: anchor.key.x + (geometry.x - anchor.geometry.x),
+      y: anchor.key.y + (geometry.y - anchor.geometry.y),
     };
   }
 

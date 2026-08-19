@@ -165,3 +165,50 @@ describe('placeNewKey', () => {
     for (const key of learned) expect(key.x).toBeGreaterThanOrEqual(0);
   });
 });
+
+describe('placeNewKey - which key it measures from', () => {
+  it('anchors on the nearest placed key, not the first one learned', () => {
+    // Z at the origin, Ctrl left moved away to (5, 5). Space belongs next to
+    // Ctrl left on a real board, so that is what it should follow — anchoring
+    // on Z would drop it somewhere unrelated to the block being worked on.
+    const placed = placeNewKey(
+      [
+        { usage: 0x1a, x: 0, y: 0 }, // KeyW, learned first
+        { usage: 0xe0, x: 5, y: 5 }, // ControlLeft, moved by hand
+      ],
+      0x2c, // Space
+    );
+
+    expect(placed[2]).toEqual({ x: 8.75, y: 5 });
+  });
+
+  it('still lines up a row learned left to right', () => {
+    // The nearest anchor and the first anchor agree here, which is why the
+    // change is invisible on the common case.
+    let learned: { usage: number; x: number; y: number }[] = [];
+    for (const usage of [0x14, 0x1a, 0x08, 0x15]) {
+      const placed = placeNewKey(learned, usage);
+      learned = placed.map((position, index) => ({
+        usage: index === placed.length - 1 ? usage : learned[index]!.usage,
+        ...position,
+      }));
+    }
+
+    expect(learned.map((k) => k.x)).toEqual([0, 1, 2, 3]);
+  });
+
+  it('measures distance on the reference board, not on the screen', () => {
+    // Both placed keys sit at the same spot on screen; only their reference
+    // positions can tell which one Space belongs beside.
+    const placed = placeNewKey(
+      [
+        { usage: 0x29, x: 3, y: 3 }, // Escape, far from Space on a board
+        { usage: 0xe2, x: 3, y: 3 }, // AltLeft, right next to Space
+      ],
+      0x2c,
+    );
+
+    // AltLeft is at 2.5 on the reference board, Space at 3.75: one unit apart.
+    expect(placed[2]).toEqual({ x: 4.25, y: 3 });
+  });
+});
