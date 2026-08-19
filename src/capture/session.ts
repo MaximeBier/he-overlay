@@ -1,4 +1,4 @@
-import { decodeAnalogReport, type DecodeAnomaly } from '../keyboard/decode';
+import { decodeAnalogReport, type AnalogEntry, type DecodeAnomaly } from '../keyboard/decode';
 import { buildFrame, createFrameEmitter } from '../protocol/emit';
 import type { FrameKey } from '../protocol/messages';
 import type { ObsClient } from '../transport/obs';
@@ -9,6 +9,13 @@ export interface CaptureSessionOptions {
   onAnomaly(anomaly: DecodeAnomaly): void;
   /** Identifiers of the configured keys, or `null` to carry them all. */
   selectedIds?(): readonly number[] | null;
+  /**
+   * Raw decoded entries, before the configuration filters them.
+   *
+   * Learning reads these rather than the frame: the key being taught is by
+   * definition not configured yet, so the frame does not carry it.
+   */
+  onEntries?(entries: readonly AnalogEntry[]): void;
 }
 
 export interface CaptureSession {
@@ -37,6 +44,7 @@ export function createCaptureSession(options: CaptureSessionOptions): CaptureSes
     handleReport(data, timestamp) {
       const { entries, anomalies } = decodeAnalogReport(data);
       for (const anomaly of anomalies) options.onAnomaly(anomaly);
+      options.onEntries?.(entries);
 
       current = buildFrame(entries, options.selectedIds?.() ?? null);
 

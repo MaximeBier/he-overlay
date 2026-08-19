@@ -173,3 +173,37 @@ describe('createCaptureSession — a connection that dropped', () => {
     expect(broadcast).toHaveBeenCalledWith({ v: 1, t: 'frame', k: [[174, 0, 0]] });
   });
 });
+
+describe('createCaptureSession — what learning reads', () => {
+  it('reports the raw entries before the configuration filters them', () => {
+    // Learning has to see a key that is not configured yet — that is the whole
+    // point — so it cannot read the frame, which carries only configured keys.
+    const seen: number[] = [];
+    const session = createCaptureSession({
+      obs: { broadcast: vi.fn(() => true), ensureConnected: vi.fn() } as never,
+      onKeys: () => {},
+      onAnomaly: () => {},
+      selectedIds: () => [],
+      onEntries: (entries) => seen.push(...entries.map((e) => e.index)),
+    });
+
+    session.handleReport(report(entry(174, 0x50, 900, 0x01)), 0);
+
+    expect(seen).toEqual([174]);
+  });
+
+  it('reports the entries even on a report that produces an empty frame', () => {
+    const seen: number[] = [];
+    const session = createCaptureSession({
+      obs: { broadcast: vi.fn(() => true), ensureConnected: vi.fn() } as never,
+      onKeys: () => {},
+      onAnomaly: () => {},
+      selectedIds: () => [9],
+      onEntries: (entries) => seen.push(...entries.map((e) => e.index)),
+    });
+
+    session.handleReport(report(entry(174, 0x50, 900, 0x01)), 0);
+
+    expect(seen).toEqual([174]);
+  });
+});
