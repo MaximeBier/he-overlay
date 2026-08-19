@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { FALLBACK_LAYOUTS, labelFor, loadLayoutMap, resolveLayout } from './labels';
+import { ISO_GEOMETRY } from './geometry';
 
 const azerty = new Map([
   ['KeyQ', 'a'],
@@ -18,9 +19,9 @@ describe('labelFor', () => {
     expect(labelFor(0x1a, azerty)).toBe('Z');
   });
 
-  it('falls back to the position name when the layout stays silent', () => {
+  it('falls back to what the keycap prints when the layout stays silent', () => {
     expect(labelFor(0x2c, azerty)).toBe('Space');
-    expect(labelFor(0xe1, azerty)).toBe('ShiftLeft');
+    expect(labelFor(0xe1, azerty)).toBe('Shift');
   });
 
   it('falls back to the position name when the API is unavailable', () => {
@@ -109,5 +110,67 @@ describe('loadLayoutMap', () => {
     } as unknown as Navigator;
 
     await expect(loadLayoutMap(nav)).resolves.toBeNull();
+  });
+});
+
+describe('keycap labels for the keys that print no character', () => {
+  // getLayoutMap only speaks for the writing keys. Everything else fell back
+  // to the position name — "ArrowLeft", "ControlRight" — which is a debugging
+  // string, not something to put on air.
+  it('uses the arrows a keycap actually prints', () => {
+    expect(labelFor(0x50, null)).toBe('←');
+    expect(labelFor(0x51, null)).toBe('↓');
+    expect(labelFor(0x4f, null)).toBe('→');
+    expect(labelFor(0x52, null)).toBe('↑');
+  });
+
+  it('names the modifiers the way both sides of the board are printed', () => {
+    expect(labelFor(0xe0, null)).toBe('Ctrl');
+    expect(labelFor(0xe4, null)).toBe('Ctrl');
+    expect(labelFor(0xe1, null)).toBe('Shift');
+    expect(labelFor(0xe5, null)).toBe('Shift');
+    expect(labelFor(0xe2, null)).toBe('Alt');
+    expect(labelFor(0xe6, null)).toBe('Alt Gr');
+  });
+
+  it('shortens the long ones so they fit on a key', () => {
+    expect(labelFor(0x29, null)).toBe('Esc');
+    expect(labelFor(0x2a, null)).toBe('Bksp');
+    expect(labelFor(0x39, null)).toBe('Caps');
+    expect(labelFor(0x4b, null)).toBe('Pg Up');
+    expect(labelFor(0x4e, null)).toBe('Pg Dn');
+    expect(labelFor(0x65, null)).toBe('Menu');
+  });
+
+  it('gives the numpad the digits printed on it', () => {
+    expect(labelFor(0x62, null)).toBe('0');
+    expect(labelFor(0x5f, null)).toBe('7');
+    expect(labelFor(0x57, null)).toBe('+');
+    expect(labelFor(0x58, null)).toBe('Enter');
+  });
+
+  it('leaves no key of the board showing a position name', () => {
+    // Anything camelCase reaching the screen is a leaked debugging string. The
+    // writing keys are exempt: getLayoutMap always speaks for those, and the
+    // position name only shows when the API is missing entirely.
+    const writingKey =
+      /^(Key[A-Z]|Digit[0-9]|Intl|Backquote|Minus|Equal|Bracket|Semicolon|Quote|Backslash|Comma|Period|Slash)/;
+    const leaked = ISO_GEOMETRY.filter(
+      (key) => !writingKey.test(key.code) && /[a-z][A-Z]/.test(labelFor(key.usage, null)),
+    );
+
+    expect(leaked.map((k) => k.code)).toEqual([]);
+  });
+
+  it('lets the detected layout win over the keycap table', () => {
+    // The table is a fallback, never an override: a layout that names a key
+    // knows better than we do.
+    expect(labelFor(0x2c, new Map([['Space', 'Espace']]))).toBe('Espace');
+  });
+
+  it('treats a blank answer from the layout as no answer', () => {
+    // getLayoutMap returns " " for Space. Taken at face value it produced a
+    // label made of one space — invisible on air, and impossible to diagnose.
+    expect(labelFor(0x2c, new Map([['Space', ' ']]))).toBe('Space');
   });
 });

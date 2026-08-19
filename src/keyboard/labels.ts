@@ -23,14 +23,81 @@ export async function loadLayoutMap(nav: Navigator | undefined): Promise<LayoutM
   }
 }
 
+/**
+ * What a keycap prints for the keys that produce no character.
+ *
+ * `getLayoutMap()` only speaks for the writing keys, so everything else used to
+ * fall back to its position name — "ArrowLeft", "ControlRight". Those are
+ * debugging strings; they have no business on a stream.
+ *
+ * Text over symbols wherever a symbol is not universally cut: the label is
+ * drawn with the configured font, and a glyph the font lacks renders as an
+ * empty box on air. The four arrows are the exception — they exist everywhere,
+ * and no wording beats them.
+ *
+ * Left and right variants share one label, exactly as both keycaps do; the
+ * position on the board is what tells them apart.
+ */
+const KEYCAP_LABELS: Record<string, string> = {
+  Escape: 'Esc',
+  PrintScreen: 'Prt Sc',
+  ScrollLock: 'Scroll',
+  Pause: 'Pause',
+  Backspace: 'Bksp',
+  Insert: 'Ins',
+  Home: 'Home',
+  PageUp: 'Pg Up',
+  Delete: 'Del',
+  End: 'End',
+  PageDown: 'Pg Dn',
+  Tab: 'Tab',
+  CapsLock: 'Caps',
+  Enter: 'Enter',
+  ShiftLeft: 'Shift',
+  ShiftRight: 'Shift',
+  ControlLeft: 'Ctrl',
+  ControlRight: 'Ctrl',
+  AltLeft: 'Alt',
+  AltRight: 'Alt Gr',
+  MetaLeft: 'Win',
+  MetaRight: 'Win',
+  ContextMenu: 'Menu',
+  Space: 'Space',
+  ArrowLeft: '←',
+  ArrowDown: '↓',
+  ArrowRight: '→',
+  ArrowUp: '↑',
+  NumLock: 'Num',
+  NumpadDivide: '/',
+  NumpadMultiply: '*',
+  NumpadSubtract: '-',
+  NumpadAdd: '+',
+  NumpadEnter: 'Enter',
+  NumpadDecimal: '.',
+  Numpad0: '0',
+  Numpad1: '1',
+  Numpad2: '2',
+  Numpad3: '3',
+  Numpad4: '4',
+  Numpad5: '5',
+  Numpad6: '6',
+  Numpad7: '7',
+  Numpad8: '8',
+  Numpad9: '9',
+};
+
 export function labelFor(usage: number, layout: LayoutMapLike | null): string {
   const geometry = geometryFor(usage);
   if (!geometry) return `HID 0x${usage.toString(16)}`;
 
-  const produced = layout?.get(geometry.code);
-  if (!produced) return geometry.code;
+  // Trimmed, because `getLayoutMap()` answers " " for Space. Taken at face
+  // value that is a label made of one space: invisible on air, and impossible
+  // to tell apart from a missing label.
+  const produced = layout?.get(geometry.code)?.trim();
+  if (produced) return produced.length === 1 ? produced.toUpperCase() : produced;
 
-  return produced.length === 1 ? produced.toUpperCase() : produced;
+  // The detected layout always wins; this only fills the silence it leaves.
+  return KEYCAP_LABELS[geometry.code] ?? geometry.code;
 }
 
 /**
