@@ -12,10 +12,12 @@
   import { loadSettings, saveSettings, overlayUrl, browserStorage } from './settings';
   import { createOverlayRegistry } from './overlays';
   import { createConfigBroadcaster } from './broadcast';
-  import { resolve } from '../config/resolve';
+  import { addLearnedKey, pickLearned, removeKey } from './learn';
+  import { loadLayoutMap, type LayoutMapLike } from '../keyboard/labels';
+  import KeyLearner from './KeyLearner.svelte';
+  import LayoutEditor from './LayoutEditor.svelte';
   import { loadConfig, saveConfig, exportConfig, importConfig } from '../config/storage';
   import type { OverlayConfig } from '../config/schema';
-  import KeyboardView from '../view/KeyboardView.svelte';
   import StatusBar from './StatusBar.svelte';
   import type { DecodeAnomaly } from '../keyboard/decode';
   import type { FrameKey } from '../protocol/messages';
@@ -30,9 +32,11 @@
   let config = $state(stored.config);
   /** What to say about the configuration: a load problem, or an import result. */
   let notice = $state(loadNotice(stored.problem, stored.dropped));
-  // Resolved once per change rather than once per frame: the preview and the
-  // overlay must be handed the very same shape (spec §5.2).
-  let resolved = $derived(resolve(config));
+  let learning = $state(false);
+  let selectedIds = $state<number[]>([]);
+  let layout = $state<LayoutMapLike | null>(null);
+  void loadLayoutMap(navigator).then((map) => (layout = map));
+
   let rate = $state(0);
   let overlayCount = $state(0);
 
@@ -220,9 +224,19 @@
       broadcast: (message) => obs.broadcast(message),
       ensureConnected: (now) => obs.ensureConnected(now),
     },
+    // Only the configured keys travel: the overlay filters nothing (spec §6).
+    selectedIds: () => config.keys.map((key) => key.id),
+    onEntries: (entries) => {
+      if (!learning) return;
+      const learned = pickLearned(entries);
+      if (!learned) return;
+      // One key per activation: the mode closes itself, so holding the key
+      // down cannot add it a second time.
+      learning = false;
+      updateConfig(addLearnedKey(config, learned, layout));
+    },
     onKeys: (k) => {
       frame = k;
-      if (import.meta.env.DEV) devDoor.onFrame?.(k);
       rate = session.rate;
       // Expiry is computed on read, so an overlay that went away only stops
       // being counted once something asks. Without this it would linger until
@@ -237,40 +251,6 @@
     onReport: (data, timestamp) => session.handleReport(data, timestamp),
     onStatus: (s) => (keyboardStatus = s),
   });
-
-  /**
-   * Development-only door onto the editing configuration.
-   *
-   * Kept until task 20 brings key learning, not removed at task 17 as the plan
-   * said: JSON import only replaces this once a configuration can be *created*
-   * some other way, and until then a file has to come from somewhere. `onFrame`
-   * is how matrix indices are found at all — they differ per keyboard, and the
-   * shared view replaced the list that used to show them.
-   *
-   * `import.meta.env.DEV` is statically false in a build, so none of this
-   * reaches the bundle OBS loads.
-   */
-  const devDoor = {
-    get config() {
-      // A snapshot, not the live proxy: mutating what comes out must never
-      // appear to work. Writing through the proxy repaints the preview without
-      // persisting or broadcasting, so the preview and the broadcast disagree
-      // — the one property this milestone exists to guarantee.
-      return $state.snapshot(config);
-    },
-    set config(next: OverlayConfig) {
-      updateConfig(next);
-    },
-    get frame() {
-      return frame;
-    },
-    /** Called on every decoded report, before the emitter throttles anything. */
-    onFrame: null as ((keys: readonly FrameKey[]) => void) | null,
-  };
-
-  if (import.meta.env.DEV) {
-    (globalThis as Record<string, unknown>).heOverlayDev = devDoor;
-  }
 
   // Nothing to do on switching the machine on (spec §10): a keyboard already
   // authorised resumes without a gesture, and the credentials come from the
@@ -316,12 +296,25 @@
     <p class="notice" role="status">{notice}</p>
   {/if}
 
-  <!-- The same component OBS renders, from the same resolved shape. The
-       default configuration is empty, so nothing shows until milestone 4
-       teaches the first key. -->
-  <section class="preview">
-    <KeyboardView config={resolved} {frame} />
-  </section>
+  <div class="profile">
+    <KeyLearner bind:learning onCancel={() => (learning = false)} />
+  </div>
+
+  <!-- The same component OBS renders, from the same resolved shape — with the
+       editor decorations on, which the broadcast never gets. -->
+  <LayoutEditor {config} {frame} bind:selectedIds onChange={updateConfig} />
+
+  {#if config.keys.length > 0}
+    <ul class="keys">
+      {#each config.keys as key (key.id)}
+        <li>
+          <span class="label">{key.label}</span>
+          <span class="index">index {key.id}</span>
+          <button onclick={() => updateConfig(removeKey(config, key.id))}>Remove</button>
+        </li>
+      {/each}
+    </ul>
+  {/if}
 </main>
 
 <style>
@@ -346,12 +339,24 @@
     color: var(--he-override, #d9a05b);
     margin: 0;
   }
-  .preview {
-    background: var(--he-stage, #0b0d11);
-    border-radius: var(--he-radius, 4px);
-    padding: var(--he-space, 0.5rem);
-    min-height: 4rem;
-    align-self: stretch;
+  .keys {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.25rem;
+  }
+  .keys li {
+    display: flex;
+    gap: var(--he-space, 0.5rem);
+    align-items: center;
+  }
+  .label {
+    min-width: 4rem;
+    font-weight: 700;
+  }
+  .index {
+    color: var(--he-text-muted, #8b90a0);
   }
   input[readonly] {
     min-width: 32rem;
