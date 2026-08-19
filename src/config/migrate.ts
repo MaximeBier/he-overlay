@@ -7,7 +7,7 @@ import {
   type LayoutOverride,
   type OverlayConfig,
 } from './schema';
-import { isExtent, isPosition } from './validate';
+import { isExtent, isPosition, isStyleValue } from './validate';
 
 export type MigrationResult =
   /**
@@ -30,13 +30,6 @@ const MIGRATIONS: Record<number, (config: Loose) => Loose> = {
 };
 
 const LAYOUT_OVERRIDES: readonly string[] = ['auto', 'azerty', 'qwerty', 'qwertz'];
-const FILL_DIRECTIONS: readonly string[] = ['up', 'down', 'left', 'right'];
-/** The only color syntax `luminance` in the scene knows how to read. */
-const HEX_COLOR = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
-/** Property names ending in `Color`, resolved once against the style shape. */
-const COLOR_KEYS: readonly string[] = Object.keys(DEFAULT_STYLE).filter((name) =>
-  name.endsWith('Color'),
-);
 /** Sizes that belong to the global style and that no key may carry. */
 const GLOBAL_ONLY: readonly (keyof GlobalStyle)[] = ['unit', 'gap'];
 const GLOBAL_STYLE_KEYS = Object.keys(DEFAULT_STYLE) as readonly (keyof GlobalStyle)[];
@@ -61,15 +54,7 @@ function pickStyle(raw: unknown, properties: readonly (keyof GlobalStyle)[]): Lo
   const style: Loose = {};
   for (const property of properties) {
     const value = source[property];
-    const fallback = DEFAULT_STYLE[property];
-    if (typeof value !== typeof fallback) continue;
-    if (typeof value === 'number' && !Number.isFinite(value)) continue;
-    if (property === 'fillDirection' && !FILL_DIRECTIONS.includes(value as string)) continue;
-    if (COLOR_KEYS.includes(property) && !HEX_COLOR.test(value as string)) continue;
-    // A unit of zero collapses the scene, a negative one produces an invalid
-    // SVG width that browsers discard: a blank overlay, on air, in silence.
-    if (property === 'unit' && !((value as number) > 0)) continue;
-    if (property === 'gap' && (value as number) < 0) continue;
+    if (!isStyleValue(property, value)) continue;
     style[property] = value;
   }
   return style;

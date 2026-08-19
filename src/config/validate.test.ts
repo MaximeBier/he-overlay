@@ -88,3 +88,30 @@ describe('isResolvedConfig', () => {
     expect(isResolvedConfig(config)).toBe(true);
   });
 });
+
+describe('isResolvedConfig - rules that must match the import side', () => {
+  const styled = (over: Record<string, unknown>) => {
+    const config = resolved();
+    const keys = config.keys as Record<string, unknown>[];
+    const style = { ...(keys[0]!.style as Record<string, unknown>), ...over };
+    return isResolvedConfig({ ...config, keys: [{ ...keys[0]!, style }] });
+  };
+
+  it('refuses a colour the renderer cannot read', () => {
+    // `luminance` understands #rgb and #rrggbb and nothing else. A CSS name
+    // passes typeof, reaches contrastingLabel, returns null, and the label
+    // stays light — white text on a white key. migrate refuses these; the wire
+    // has to refuse them too, or the rule only holds on one side.
+    expect(styled({ restColor: 'white' })).toBe(false);
+    expect(styled({ activeColor: 'rgb(255,0,0)' })).toBe(false);
+    expect(styled({ fillColor: '#f0a' })).toBe(true);
+    expect(styled({ borderColor: '#FF00AA' })).toBe(true);
+  });
+
+  it('refuses a negative corner radius', () => {
+    // `rx="-5"` is an SVG error, not a square corner, and what survives is up
+    // to the browser. It sits right next to unit and gap, which are bounded.
+    expect(styled({ radius: -5 })).toBe(false);
+    expect(styled({ radius: 0 })).toBe(true);
+  });
+});

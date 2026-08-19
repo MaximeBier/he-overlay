@@ -110,3 +110,66 @@ describe('import and export', () => {
     if (result.ok) expect(result.dropped).toBe(1);
   });
 });
+
+describe('what loading leaves behind in storage', () => {
+  const aStore = (raw: string) => {
+    const map = new Map([['he-overlay:config', raw]]);
+    return {
+      getItem: (key: string) => map.get(key) ?? null,
+      setItem: (key: string, value: string) => void map.set(key, value),
+      map,
+    };
+  };
+
+  it('writes the cleaned configuration back, so the warning does not return forever', () => {
+    // Cleaning only in memory means the notice reappears on every reload, about
+    // something the user has no way to fix.
+    const storage = aStore(
+      JSON.stringify({ version: 1, layout: 'iso', style: {}, keys: [aKey, aKey] }),
+    );
+
+    expect(loadConfig(storage).dropped).toBe(1);
+    expect(loadConfig(storage).dropped).toBe(0);
+  });
+
+  it('leaves storage untouched when there was nothing to clean', () => {
+    const raw = exportConfig(defaultConfig());
+    const storage = aStore(raw);
+
+    loadConfig(storage);
+
+    expect(storage.map.get('he-overlay:config')).toBe(raw);
+  });
+
+  it('puts a configuration from a newer version aside before anything overwrites it', () => {
+    // Falling back to the defaults is right; letting the next save bury a
+    // profile we just refused to guess at is not. A rolled-back deployment
+    // would cost an evening of layout work.
+    const raw = JSON.stringify({ version: CONFIG_VERSION + 1, layout: 'iso', style: {}, keys: [] });
+    const storage = aStore(raw);
+
+    const result = loadConfig(storage);
+
+    expect(result.problem).toBe('too-new');
+    expect(storage.map.get('he-overlay:config.backup')).toBe(raw);
+  });
+
+  it('keeps an unreadable configuration aside too, in case it can be salvaged', () => {
+    const storage = aStore('{{{');
+
+    loadConfig(storage);
+
+    expect(storage.map.get('he-overlay:config.backup')).toBe('{{{');
+  });
+
+  it('survives a storage that refuses to be written to while loading', () => {
+    const storage = {
+      getItem: () => '{{{',
+      setItem: () => {
+        throw new DOMException('QuotaExceededError');
+      },
+    };
+
+    expect(() => loadConfig(storage)).not.toThrow();
+  });
+});

@@ -288,3 +288,28 @@ describe('migrate - what it silently threw away', () => {
     expect(result.ok).toBe(true);
   });
 });
+
+describe('migrate - the bounds that stop just short', () => {
+  it('refuses a negative corner radius', () => {
+    for (const scope of ['global', 'key'] as const) {
+      const result = migrate({
+        version: 1,
+        layout: 'iso',
+        style: scope === 'global' ? { radius: -5 } : {},
+        keys: scope === 'key' ? [{ ...aKey, style: { radius: -5 } }] : [],
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) continue;
+      if (scope === 'global') expect(result.config.style.radius).toBe(DEFAULT_STYLE.radius);
+      else expect(result.config.keys[0]?.style).toBeUndefined();
+    }
+  });
+
+  it('keeps a radius of zero, which is a square corner on purpose', () => {
+    const result = migrate({ version: 1, layout: 'iso', keys: [], style: { radius: 0 } });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.config.style.radius).toBe(0);
+  });
+});

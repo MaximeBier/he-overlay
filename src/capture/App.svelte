@@ -29,7 +29,7 @@
   const stored = loadConfig(storage);
   let config = $state(stored.config);
   /** What to say about the configuration: a load problem, or an import result. */
-  let notice = $state(configNotice(stored.problem, stored.dropped));
+  let notice = $state(loadNotice(stored.problem, stored.dropped));
   // Resolved once per change rather than once per frame: the preview and the
   // overlay must be handed the very same shape (spec §5.2).
   let resolved = $derived(resolve(config));
@@ -116,17 +116,34 @@
     broadcaster.publish(config);
   }
 
-  function configNotice(problem: 'unreadable' | 'too-new' | null, dropped: number): string | null {
+  function droppedKeys(dropped: number): string {
+    const plural = dropped === 1 ? ['key', 'was'] : ['keys', 'were'];
+    return `${dropped} ${plural[0]} could not be read and ${plural[1]} left out.`;
+  }
+
+  /**
+   * What to say about the configuration found in storage at startup.
+   *
+   * Kept apart from the import wording on purpose. The two failures look alike
+   * and mean opposite things: here the saved profile really was unusable, on
+   * an import nothing was lost at all. Sharing one sentence told people they
+   * had just lost their layout when they had not.
+   */
+  function loadNotice(problem: 'unreadable' | 'too-new' | null, dropped: number): string | null {
     if (problem === 'unreadable') {
-      return 'Your saved configuration could not be read. Starting from the defaults — importing a profile will replace them.';
+      return (
+        'Your saved configuration could not be read, so this starts from the defaults. ' +
+        'The unreadable copy has been kept aside.'
+      );
     }
     if (problem === 'too-new') {
-      return 'Your saved configuration was written by a newer version of HE Overlay. Starting from the defaults rather than guessing at it.';
+      return (
+        'Your saved configuration was written by a newer version of HE Overlay. This starts ' +
+        'from the defaults rather than guessing at it; your profile has been kept aside, ' +
+        'not overwritten.'
+      );
     }
-    if (dropped > 0) {
-      return `${dropped} key${dropped === 1 ? '' : 's'} could not be read and ${dropped === 1 ? 'was' : 'were'} left out.`;
-    }
-    return null;
+    return dropped > 0 ? droppedKeys(dropped) : null;
   }
 
   function downloadProfile() {
@@ -147,17 +164,39 @@
     const file = input.files?.[0];
     if (!file) return;
 
-    const result = importConfig(await file.text());
+    let text: string;
+    try {
+      // `File.text()` rejects when the file moved, changed, or sat on a volume
+      // that went away between the picker closing and the read. Unhandled, the
+      // rejection belongs to nobody: no message, and the input never cleared,
+      // so the second attempt on the same file does nothing at all.
+      text = await file.text();
+    } catch {
+      notice = 'That file could not be read. Your configuration is unchanged.';
+      input.value = '';
+      return;
+    }
+
     // Cleared either way, or picking the same file twice in a row fires
     // nothing — which is exactly what someone does after fixing it by hand.
     input.value = '';
 
+    const result = importConfig(text);
     if (!result.ok) {
-      notice = configNotice(result.reason, 0);
+      // Never the startup wording: nothing was lost here. The saved profile is
+      // intact and the current one untouched.
+      notice =
+        result.reason === 'too-new'
+          ? 'That profile was written by a newer version of HE Overlay. Nothing was ' +
+            'imported, and your configuration is unchanged.'
+          : 'That file is not a HE Overlay profile. Nothing was imported, and your ' +
+            'configuration is unchanged.';
       return;
     }
+
     updateConfig(result.config);
-    notice = configNotice(null, result.dropped) ?? 'Profile imported.';
+    notice =
+      result.dropped > 0 ? `Profile imported. ${droppedKeys(result.dropped)}` : 'Profile imported.';
   }
 
   /**

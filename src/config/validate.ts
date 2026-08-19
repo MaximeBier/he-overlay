@@ -2,7 +2,43 @@ import { STYLE_KEYS, DEFAULT_STYLE, type ResolvedConfig } from './schema';
 
 type Loose = Record<string, unknown>;
 
-const FILL_DIRECTIONS: readonly string[] = ['up', 'down', 'left', 'right'];
+/**
+ * The style rules both sides share.
+ *
+ * They live here, and `migrate` imports them, because a rule kept in two
+ * literal lists is a rule that will hold on one side only. The wire and the
+ * imported file must agree on what a colour is; they differ solely on whether
+ * a style may be partial.
+ */
+export const FILL_DIRECTIONS: readonly string[] = ['up', 'down', 'left', 'right'];
+
+/** The only colour syntax the scene's `luminance` knows how to read. */
+export const HEX_COLOR = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
+
+/** Property names ending in `Color`, resolved once against the style shape. */
+export const COLOR_KEYS: readonly string[] = Object.keys(DEFAULT_STYLE).filter((name) =>
+  name.endsWith('Color'),
+);
+
+/**
+ * Checks one style property against what the renderer can actually draw.
+ *
+ * Shared by both boundaries. `radius` sits with the sizes rather than with the
+ * free numbers: `rx="-5"` is an SVG error, not a square corner, and what
+ * survives it is up to the browser.
+ */
+export function isStyleValue(property: string, value: unknown): boolean {
+  const fallback = DEFAULT_STYLE[property as keyof typeof DEFAULT_STYLE];
+  if (typeof value !== typeof fallback) return false;
+  if (typeof value === 'number' && !Number.isFinite(value)) return false;
+  if (property === 'fillDirection') return FILL_DIRECTIONS.includes(value as string);
+  if (COLOR_KEYS.includes(property)) return HEX_COLOR.test(value as string);
+  // A unit of zero collapses the scene, a negative one produces an invalid SVG
+  // width that browsers discard: a blank overlay, on air, in silence.
+  if (property === 'unit') return (value as number) > 0;
+  if (property === 'gap' || property === 'radius') return (value as number) >= 0;
+  return true;
+}
 
 /** Geometry has to be drawable, and JSON is happy to hand over Infinity. */
 export function isExtent(value: unknown): value is number {
@@ -22,13 +58,7 @@ function isCompleteStyle(value: unknown): boolean {
   if (typeof value !== 'object' || value === null) return false;
 
   const style = value as Loose;
-  return STYLE_KEYS.every((property) => {
-    const held = style[property];
-    if (typeof held !== typeof DEFAULT_STYLE[property]) return false;
-    if (typeof held === 'number' && !Number.isFinite(held)) return false;
-    if (property === 'fillDirection') return FILL_DIRECTIONS.includes(held as string);
-    return true;
-  });
+  return STYLE_KEYS.every((property) => isStyleValue(property, style[property]));
 }
 
 function isResolvedKey(value: unknown): boolean {
