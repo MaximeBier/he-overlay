@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildFrame, createFrameEmitter, sameFrame, FRAME_INTERVAL_MS } from './emit';
+import { buildFrame, createFrameEmitter, sameFrame, FRAME_INTERVAL_MS, TRAVEL_STEP } from './emit';
 import type { AnalogEntry } from '../keyboard/decode';
 import type { FrameKey } from './messages';
 
@@ -273,5 +273,115 @@ describe('createFrameEmitter — the far end only saw what actually left', () =>
     emitter.reset();
 
     expect(emitter.rate).toBe(1);
+  });
+});
+
+describe('createFrameEmitter - a rise that stops at the top', () => {
+  // Reported from OBS: pressing a key hard and holding it leaves the bar part
+  // way up. The last report of the rise falls inside the silence window, and
+  // the keyboard sends nothing more because nothing is changing — spec §6.2's
+  // defect, upward. No timer can rescue it either: a backgrounded tab, which
+  // is what a fullscreen game makes of the capture page, throttles timers to
+  // one tick a minute.
+  //
+  // So the error is bounded by travel instead of by time.
+  it('emits a large jump even inside the silence window', () => {
+    const emitter = createFrameEmitter();
+    const delivered: FrameKey[][] = [];
+    const deliver = (f: FrameKey[]) => {
+      delivered.push(f);
+      return true;
+    };
+
+    emitter.push([[3, 0, 0]], 0, deliver);
+    emitter.push([[3, 500, 1]], 1, deliver); // actuation
+    emitter.push([[3, 800, 1]], 2, deliver);
+    emitter.push([[3, 1023, 1]], 3, deliver); // and then the key is held
+
+    expect(delivered.at(-1)).toEqual([[3, 1023, 1]]);
+  });
+
+  it('leaves the overlay no further from the truth than the threshold', () => {
+    const emitter = createFrameEmitter();
+    let last: FrameKey[] = [];
+    const deliver = (f: FrameKey[]) => {
+      last = f;
+      return true;
+    };
+
+    // A full rise, one report per millisecond, all inside one window.
+    for (let travel = 0; travel <= 1023; travel += 7) {
+      emitter.push([[3, travel, 0]], travel / 7, deliver);
+    }
+
+    expect(1023 - last[0]![1]).toBeLessThanOrEqual(TRAVEL_STEP);
+  });
+
+  it('still sacrifices the small variations the eye cannot follow', () => {
+    const emitter = createFrameEmitter();
+    emitter.push([[3, 500, 0]], 0, sent);
+
+    expect(emitter.push([[3, 500 + TRAVEL_STEP - 1, 0]], 1, sent)).toBeNull();
+  });
+
+  it('counts the jump per key, so one moving key carries the frame', () => {
+    const emitter = createFrameEmitter();
+    const held: FrameKey = [9, 700, 1];
+    emitter.push([held, [3, 0, 0]], 0, sent);
+
+    expect(emitter.push([held, [3, 900, 0]], 1, sent)).toBe('jump');
+  });
+});
+
+describe('createFrameEmitter - both ends of the travel are guaranteed', () => {
+  // The rest branch guarantees zero always arrives. Nothing guaranteed the
+  // other end, so a key held fully down could sit at 90 % on air — the travel
+  // threshold bounds the error, it does not remove it, and the last report of
+  // a rise is followed by silence.
+  it('always emits a key that reaches the bottom of its travel', () => {
+    const emitter = createFrameEmitter();
+    const delivered: FrameKey[][] = [];
+    const deliver = (f: FrameKey[]) => {
+      delivered.push(f);
+      return true;
+    };
+
+    emitter.push([[3, 0, 0]], 0, deliver);
+    emitter.push([[3, 950, 1]], 1, deliver);
+    // Within the threshold of the last emission, and inside the silence
+    // window: nothing but this branch can carry it.
+    emitter.push([[3, 1023, 1]], 2, deliver);
+
+    expect(delivered.at(-1)).toEqual([[3, 1023, 1]]);
+  });
+
+  it('accepts a bottom-out a hair short of the maximum', () => {
+    const emitter = createFrameEmitter();
+    emitter.push([[3, 960, 1]], 0, sent);
+
+    expect(emitter.push([[3, 1021, 1]], 1, sent)).toBe('bottomed');
+  });
+
+  it('does not re-emit a key already resting at the bottom', () => {
+    // A finger holding a key down jitters by a level or two. Firing on each
+    // of those would be the flicker the rest floor exists to prevent.
+    const emitter = createFrameEmitter();
+    emitter.push([[3, 1023, 1]], 0, sent);
+
+    expect(emitter.push([[3, 1022, 1]], 1, sent)).toBeNull();
+  });
+
+  it('guarantees the bottom for an axis key, which never actuates', () => {
+    const emitter = createFrameEmitter();
+    emitter.push([[3, 940, 0]], 0, sent);
+
+    expect(emitter.push([[3, 1023, 0]], 1, sent)).toBe('bottomed');
+  });
+
+  it('keeps the rest branch ahead of it', () => {
+    const emitter = createFrameEmitter();
+    emitter.push([[3, 1023, 1]], 0, sent);
+
+    expect(emitter.push([[3, 0, 0]], 1, sent)).toBe('active-change');
   });
 });

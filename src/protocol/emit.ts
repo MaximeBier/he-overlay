@@ -1,4 +1,5 @@
 import type { AnalogEntry } from '../keyboard/decode';
+import { MAX_TRAVEL } from '../keyboard/analog-report';
 import type { FrameKey } from './messages';
 
 export const FRAME_INTERVAL_MS = 1000 / 60;
@@ -36,6 +37,37 @@ export function buildFrame(entries: AnalogEntry[], ids: readonly number[] | null
  */
 const REST_TRAVEL_FLOOR = 2;
 
+/**
+ * Travel change that outranks the frame cap, out of 1023.
+ *
+ * The cap alone bounds the emission rate but not the error. A key pressed hard
+ * and held reports its whole rise inside one silence window and then stops —
+ * the keyboard only speaks when something changes — so the last value never
+ * leaves and the overlay keeps whatever it caught on the way up. That is spec
+ * §6.2's frozen key, upward, and no timer can rescue it: the capture page sits
+ * in a background tab whenever the game is fullscreen, where timers are
+ * throttled to one tick a minute.
+ *
+ * Bounding the error by travel instead fixes it without a clock. Ten percent
+ * costs at most ten frames per full press — the same order as the cap — and
+ * leaves the overlay never more than a tenth of a travel behind.
+ */
+export const TRAVEL_STEP = 102;
+
+/**
+ * Travel from which a key counts as bottomed out.
+ *
+ * The rest branch guarantees zero always arrives; this is its mirror at the
+ * other end, and it is needed for the same reason. `TRAVEL_STEP` bounds the
+ * error but does not remove it, so a rise that ends within one step of the
+ * last emission — and is then followed by silence, because the key is held —
+ * leaves the bar short of full on air while the preview shows it complete.
+ *
+ * The same two-level margin as the rest floor: a finger holding a key down
+ * jitters, and both ends of the travel deserve the same tolerance.
+ */
+const BOTTOM_TRAVEL_CEILING = MAX_TRAVEL - REST_TRAVEL_FLOOR;
+
 export function sameFrame(a: readonly FrameKey[] | null, b: readonly FrameKey[]): boolean {
   if (a === null || a.length !== b.length) return false;
   return a.every((key, i) => {
@@ -63,18 +95,24 @@ function compare(before: readonly FrameKey[], after: readonly FrameKey[]) {
   const current = state(after);
   let actuation = false;
   let released = false;
+  let jumped = false;
+  let bottomed = false;
 
   for (const id of new Set([...previous.keys(), ...current.keys()])) {
     const was = previous.get(id) ?? RELEASED;
     const now = current.get(id) ?? RELEASED;
     if (was.active !== now.active) actuation = true;
     if (was.travel > REST_TRAVEL_FLOOR && now.travel === 0) released = true;
+    if (Math.abs(now.travel - was.travel) >= TRAVEL_STEP) jumped = true;
+    if (was.travel < BOTTOM_TRAVEL_CEILING && now.travel >= BOTTOM_TRAVEL_CEILING) {
+      bottomed = true;
+    }
   }
 
-  return { actuation, released };
+  return { actuation, released, jumped, bottomed };
 }
 
-export type EmitReason = 'interval' | 'active-change' | 'rest' | null;
+export type EmitReason = 'interval' | 'active-change' | 'rest' | 'bottomed' | 'jump' | null;
 
 /** Hands a frame to the far end. `false` means it went nowhere. */
 export type Deliver = (frame: FrameKey[]) => boolean;
@@ -113,7 +151,7 @@ export function createFrameEmitter(minIntervalMs: number = FRAME_INTERVAL_MS): F
     if (sameFrame(lastFrame, frame)) return null;
     if (lastFrame === null) return 'interval';
 
-    const { actuation, released } = compare(lastFrame, frame);
+    const { actuation, released, jumped, bottomed } = compare(lastFrame, frame);
     if (actuation) return 'active-change';
     // A key coming back to rest is never sacrificed: nothing would follow it,
     // and the overlay would stay frozen on a half-pressed key (spec §6.2). The
@@ -121,6 +159,13 @@ export function createFrameEmitter(minIntervalMs: number = FRAME_INTERVAL_MS): F
     // enough, because the key that freezes is the one being released and the
     // others may well be held down at that very moment.
     if (released) return 'rest';
+    // Measured against the last frame that actually left, so the gap between
+    // what the overlay shows and what the keyboard reports can never exceed
+    // one step — however fast the rise, and even if it stops at the top.
+    // Both ends of the travel are guaranteed: zero above, and the bottom
+    // here. Between them the error is bounded rather than zero.
+    if (bottomed) return 'bottomed';
+    if (jumped) return 'jump';
 
     if (now - lastSentAt >= minIntervalMs) return 'interval';
     return null;
