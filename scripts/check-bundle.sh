@@ -42,6 +42,9 @@ absent 'keyboardHint' 'the status bar wording'
 absent 'overlay.html?port=' 'the overlay URL builder'
 absent 'heOverlayDev' 'the development door'
 absent 'he-overlay:config' 'the configuration storage'
+absent 'IntlBackslash' 'the ISO geometry table'
+absent 'ContextMenu' 'the ISO geometry table entries'
+absent 'getLayoutMap' 'the layout detection'
 
 echo
 echo "Overlay bundle is clean."
