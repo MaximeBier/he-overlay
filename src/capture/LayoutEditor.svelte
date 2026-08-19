@@ -32,7 +32,6 @@
   let drag: {
     startX: number;
     startY: number;
-    moved: boolean;
     origins: Map<number, { x: number; y: number }>;
   } | null = null;
 
@@ -57,6 +56,11 @@
    * commit to a selection, since the drag starts from it.
    */
   function onPointerDown(event: PointerEvent, id: number) {
+    // Primary button only. A right-click used to arm the drag and then have
+    // its release swallowed by the context menu, leaving the editor dragging
+    // the selection on plain mouse movement with nothing held down.
+    if (event.button !== 0) return;
+
     if (event.shiftKey) {
       // Composing a selection, not moving one: no drag starts from here, or a
       // twitch of the hand would displace the group being assembled.
@@ -72,7 +76,6 @@
     drag = {
       startX: event.clientX,
       startY: event.clientY,
-      moved: false,
       origins: new Map(
         config.keys
           .filter((key) => selectedIds.includes(key.id))
@@ -84,19 +87,41 @@
 
   function onPointerMove(event: PointerEvent) {
     if (!drag || !draft) return;
-    drag.moved = true;
+    // No button held means the release happened somewhere we never saw it —
+    // outside the window, or after the handle was removed from the DOM and
+    // took the pointer capture with it. Without this the key follows the
+    // mouse for good.
+    if (event.buttons === 0) {
+      abandon();
+      return;
+    }
+
     const dx = pixelsToUnits(event.clientX - drag.startX, config.style.unit);
     const dy = pixelsToUnits(event.clientY - drag.startY, config.style.unit);
     draft = moveKeysBy(config, drag.origins, dx, dy);
   }
 
-  function onPointerUp() {
-    if (!drag) return;
-    // Committed only if something actually moved: a plain click must not write
-    // and broadcast a configuration identical to the one already stored.
-    if (drag.moved && draft) onChange(draft);
+  /** Drops the gesture without writing anything. */
+  function abandon() {
     drag = null;
     draft = null;
+  }
+
+  function onPointerUp() {
+    if (!drag || !draft) return;
+
+    // Compared against the origins rather than "a pointermove happened": a
+    // one-pixel twitch during a click snaps back to the same grid cell, and
+    // writing there costs a synchronous stringify and a broadcast for a
+    // configuration identical to the stored one.
+    const moved = draft.keys.some((key) => {
+      const origin = drag!.origins.get(key.id);
+      return origin ? origin.x !== key.x || origin.y !== key.y : false;
+    });
+    const next = draft;
+
+    abandon();
+    if (moved) onChange(next);
   }
 
   /**
@@ -111,13 +136,20 @@
   }
 
   function onKeyDown(event: KeyboardEvent) {
-    const typing = event.target instanceof HTMLInputElement;
+    // The mode selector is not an input, and Ctrl+A inside it belongs to it.
+    const typing =
+      event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement;
 
     if (!typing && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
       event.preventDefault();
       selectedIds = shown.keys.map((key) => key.id);
     }
-    if (event.key === 'Escape') selectedIds = [];
+    if (event.key === 'Escape') {
+      // Abandons the gesture first: leaving a drag armed with no selection is
+      // the one state with no way out.
+      abandon();
+      selectedIds = [];
+    }
     if (!typing && event.key === 'Delete' && selectedIds.length > 0) {
       onChange(removeKeys(config, selectedIds));
       selectedIds = [];
@@ -128,12 +160,20 @@
   const gap = $derived(shown.style.gap);
 </script>
 
-<svelte:window onkeydown={onKeyDown} />
+<!-- The release and the cancellation are watched on the window, not on the
+     stage: a pointer can be released anywhere, and a cancelled one — touch
+     scrolling wins the gesture — never reports to the stage at all. -->
+<svelte:window
+  onkeydown={onKeyDown}
+  onpointermove={onPointerMove}
+  onpointerup={onPointerUp}
+  onpointercancel={abandon}
+/>
 
 <div class="editor">
   <!-- The one place the dashed outline and the AXIS tag appear: the broadcast
        never shows them (spec §16.3). -->
-  <div class="stage" onpointermove={onPointerMove} onpointerup={onPointerUp} role="presentation">
+  <div class="stage">
     <KeyboardView config={scene} {frame} decorations />
     {#each shown.keys as key (key.id)}
       <button
@@ -245,6 +285,9 @@
   }
   .handle {
     position: absolute;
+    /* The browser must not turn a drag into a scroll: it would cancel the
+       pointer mid-gesture. */
+    touch-action: none;
     background: transparent;
     border: 1px dashed transparent;
     border-radius: var(--he-radius, 4px);
