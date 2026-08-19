@@ -295,8 +295,8 @@
     <input type="password" bind:value={settings.password} onchange={reconnect} />
   </label>
   <p class="warning">
-    The password is stored in this browser and travels in the overlay URL below. Anyone with
-    access to this machine can read it.
+    The password is stored in this browser and travels in the overlay URL below. Anyone with access
+    to this machine can read it.
   </p>
 
   <label>

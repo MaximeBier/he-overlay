@@ -1,11 +1,7 @@
 import { ANALOG_USAGE_PAGE } from './decode';
 
 export type KeyboardStatus =
-  | 'unsupported'
-  | 'no-permission'
-  | 'disconnected'
-  | 'connected'
-  | 'no-analog-interface';
+  'unsupported' | 'no-permission' | 'disconnected' | 'connected' | 'no-analog-interface';
 
 export interface HidDeviceLike {
   opened: boolean;

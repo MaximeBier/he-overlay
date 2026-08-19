@@ -63,15 +63,8 @@ export interface FakeDevice extends HidDeviceLike {
   listenerCount(): number;
 }
 
-export function fakeDevice(
-  usagePages: number[],
-  productName = 'Wooting Two HE (ARM)',
-): FakeDevice {
-  const handlers: ((event: {
-    data: DataView;
-    reportId: number;
-    timeStamp: number;
-  }) => void)[] = [];
+export function fakeDevice(usagePages: number[], productName = 'Wooting Two HE (ARM)'): FakeDevice {
+  const handlers: ((event: { data: DataView; reportId: number; timeStamp: number }) => void)[] = [];
   return {
     opened: false,
     productName,

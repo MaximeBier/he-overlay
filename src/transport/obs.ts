@@ -9,12 +9,7 @@ import { envelope, parseMessage, type OverlayMessage } from '../protocol/message
  * those are two different things to do (spec §11).
  */
 export type ObsStatus =
-  | 'idle'
-  | 'connecting'
-  | 'identified'
-  | 'auth-failed'
-  | 'unreachable'
-  | 'disconnected';
+  'idle' | 'connecting' | 'identified' | 'auth-failed' | 'unreachable' | 'disconnected';
 
 /** Port obs-websocket listens on out of the box. Configurable in OBS (spec §6.1). */
 export const DEFAULT_OBS_PORT = 4455;

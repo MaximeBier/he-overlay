@@ -18,10 +18,7 @@ export { DEFAULT_OBS_PORT };
  * The password remains visible in the OBS source properties: that part is
  * assumed and documented (spec §6.1, §10).
  */
-export function readOverlayParams(
-  search: string,
-  hash = '',
-): { port: number; password: string } {
+export function readOverlayParams(search: string, hash = ''): { port: number; password: string } {
   const fromQuery = new URLSearchParams(search);
   const fromHash = new URLSearchParams(hash.replace(/^#/, ''));
 

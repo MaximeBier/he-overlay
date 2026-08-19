@@ -100,7 +100,10 @@ describe('migrate — a hostile file is still just a file', () => {
       version: 1,
       layout: 'iso',
       style: {},
-      keys: [{ ...aKey, id: 1, x: Number.POSITIVE_INFINITY }, { ...aKey, id: 2, y: Number.NaN }],
+      keys: [
+        { ...aKey, id: 1, x: Number.POSITIVE_INFINITY },
+        { ...aKey, id: 2, y: Number.NaN },
+      ],
     });
 
     expect(result.ok).toBe(true);
@@ -112,7 +115,10 @@ describe('migrate — a hostile file is still just a file', () => {
       version: 1,
       layout: 'iso',
       style: {},
-      keys: [{ ...aKey, id: 1, w: 0 }, { ...aKey, id: 2, h: -1 }],
+      keys: [
+        { ...aKey, id: 1, w: 0 },
+        { ...aKey, id: 2, h: -1 },
+      ],
     });
 
     expect(result.ok).toBe(true);

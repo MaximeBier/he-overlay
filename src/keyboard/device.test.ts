@@ -134,7 +134,10 @@ describe('createKeyboardLink', () => {
     const link = createKeyboardLink({ hid: fakeHid([device]), onReport, onStatus: () => {} });
     await link.resume();
 
-    device.emit(Array.from({ length: 64 }, () => 0), 3);
+    device.emit(
+      Array.from({ length: 64 }, () => 0),
+      3,
+    );
 
     expect(onReport).not.toHaveBeenCalled();
   });

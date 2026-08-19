@@ -24,12 +24,7 @@ export type ByeMessage = { v: typeof PROTOCOL_VERSION; t: 'bye'; id: string };
 export type ConfigMessage = { v: typeof PROTOCOL_VERSION; t: 'config'; config: ResolvedConfig };
 export type FrameMessage = { v: typeof PROTOCOL_VERSION; t: 'frame'; k: FrameKey[] };
 
-export type OverlayMessage =
-  | HelloMessage
-  | BeatMessage
-  | ByeMessage
-  | ConfigMessage
-  | FrameMessage;
+export type OverlayMessage = HelloMessage | BeatMessage | ByeMessage | ConfigMessage | FrameMessage;
 
 const KNOWN_TYPES = ['hello', 'beat', 'bye', 'config', 'frame'] as const;
 /** The three the overlay sends about itself, all keyed by its id. */
@@ -65,7 +60,8 @@ export function parseMessage(payload: unknown): OverlayMessage | null {
 
   const { v, t } = inner as { v?: unknown; t?: unknown };
   if (v !== PROTOCOL_VERSION) return null;
-  if (typeof t !== 'string' || !KNOWN_TYPES.includes(t as (typeof KNOWN_TYPES)[number])) return null;
+  if (typeof t !== 'string' || !KNOWN_TYPES.includes(t as (typeof KNOWN_TYPES)[number]))
+    return null;
 
   if (t === 'frame') {
     const { k } = inner as { k?: unknown };

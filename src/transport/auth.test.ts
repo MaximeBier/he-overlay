@@ -4,8 +4,12 @@ import { computeAuth } from './auth';
 
 /** Independent oracle, written against a different API than the implementation. */
 function reference(password: string, salt: string, challenge: string): string {
-  const secret = createHash('sha256').update(password + salt).digest('base64');
-  return createHash('sha256').update(secret + challenge).digest('base64');
+  const secret = createHash('sha256')
+    .update(password + salt)
+    .digest('base64');
+  return createHash('sha256')
+    .update(secret + challenge)
+    .digest('base64');
 }
 
 describe('computeAuth', () => {

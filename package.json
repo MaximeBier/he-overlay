@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "format": "prettier --write \"src/**/*.{ts,svelte}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,svelte}\""
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.0",
