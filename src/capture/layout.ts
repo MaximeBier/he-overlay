@@ -6,9 +6,12 @@ export const GRID = 0.25;
 /**
  * Snaps to the grid, and refuses anything that is not a number.
  *
- * The numeric fields hand over whatever was typed — an empty one gives `NaN`,
- * which reaches the SVG as an attribute the browser silently discards, taking
- * the key off the screen with no error anywhere.
+ * Not for the numeric fields — `<input type="number">` reports `''` when it is
+ * empty, and `+''` is zero, so the editor guards that itself. This is for the
+ * values that reach here without passing through a field: an imported profile,
+ * a config message off the wire. `NaN` survives every clamp and lands in the
+ * SVG as an attribute the browser discards, taking the key off the screen with
+ * no error anywhere.
  */
 export function snap(value: number, grid: number = GRID): number {
   if (!Number.isFinite(value)) return 0;

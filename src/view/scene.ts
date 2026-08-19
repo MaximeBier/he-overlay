@@ -3,6 +3,15 @@ import { OVERLAY_TOKENS } from '../styles/tokens';
 import type { FillDirection, ResolvedConfig } from '../config/schema';
 import type { FrameKey } from '../protocol/messages';
 
+/**
+ * Outline thickness, as a fraction of the label size.
+ *
+ * Enough to detach a light label from a light fill — the active colour against
+ * the label colour is a contrast of 1.96, far under anything readable — and
+ * thin enough not to thicken the glyph at stream size.
+ */
+const LABEL_OUTLINE_RATIO = 0.14;
+
 export interface SceneFill {
   x: number;
   y: number;
@@ -22,8 +31,18 @@ export interface SceneKey {
   baseFill: string;
   borderColor: string;
   fill: SceneFill;
-  /** Chosen from what sits behind the text, never a setting. */
+  /**
+   * One colour, whatever moves behind it.
+   *
+   * It used to be computed from the background, so the text changed shade as
+   * a key was pressed — readable, but restless, and on a stream the eye
+   * follows the flicker instead of the key. The outline below does that work
+   * now, and it does it at every travel rather than at two.
+   */
   labelFill: string;
+  labelOutline: string;
+  /** Proportional to the label, like its size (spec §16.3). */
+  labelOutlineWidth: number;
   fontFamily: string;
   fontWeight: number;
   /** Computed from the key height (spec 16.3). */
@@ -40,58 +59,6 @@ export interface Scene {
   width: number;
   height: number;
   keys: SceneKey[];
-}
-
-/** WCAG relative luminance of a `#rgb` or `#rrggbb` color. */
-function luminance(hex: string): number | null {
-  const match = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex.trim());
-  if (!match) return null;
-
-  const digits = match[1]!;
-  const full =
-    digits.length === 3
-      ? digits
-          .split('')
-          .map((digit) => digit + digit)
-          .join('')
-      : digits;
-
-  const channels = [0, 2, 4].map((offset) => {
-    const value = Number.parseInt(full.slice(offset, offset + 2), 16) / 255;
-    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
-  });
-
-  return 0.2126 * channels[0]! + 0.7152 * channels[1]! + 0.0722 * channels[2]!;
-}
-
-/**
- * Background luminance at which both labels contrast equally well.
- *
- * Derived from the two tokens rather than written down. The familiar 0.179 is
- * the crossover for pure black against pure white, and ours are neither: with
- * #DDE1E9 and #0E1015 the real crossover sits at 0.1603, so a borrowed
- * constant left a band where the code picked the label that reads worse.
- *
- * WCAG contrast is (L1 + 0.05) / (L2 + 0.05), so the two are equal when the
- * background luminance is the geometric mean of the offset endpoints.
- */
-const LABEL_CROSSOVER = (() => {
-  const light = luminance(OVERLAY_TOKENS.keyLabel);
-  const dark = luminance(OVERLAY_TOKENS.keyLabelInverted);
-  // Only if a token stops being a hex colour, which the tests would catch
-  // first; the fallback keeps the old behaviour rather than throwing at import.
-  if (light === null || dark === null) return 0.179;
-  return Math.sqrt((light + 0.05) * (dark + 0.05)) - 0.05;
-})();
-
-/**
- * The fill moves under the text: a fixed label color would be unreadable half
- * the time. So it is computed, not a setting.
- */
-export function contrastingLabel(background: string): string {
-  const value = luminance(background);
-  if (value === null) return OVERLAY_TOKENS.keyLabel;
-  return value > LABEL_CROSSOVER ? OVERLAY_TOKENS.keyLabelInverted : OVERLAY_TOKENS.keyLabel;
 }
 
 function fillRect(
@@ -178,15 +145,16 @@ export function buildScene(config: ResolvedConfig, frame: readonly FrameKey[]): 
       h,
       radius: key.style.radius,
       baseFill,
-      borderColor: key.style.borderColor,
+      // The second actuation signal. Swapping the fill colours makes a key at
+      // full travel that never fired and a key that fired at zero travel both
+      // render as one flat fill colour; the border separates them, and it
+      // reads at any travel — including none, which is where a low actuation
+      // point puts it.
+      borderColor: actuated ? key.style.activeColor : key.style.borderColor,
       fill: { ...fillRect(x, y, w, h, ratio, key.style.fillDirection), color: fillColor },
-      // Chosen from whichever colour covers most of the glyph. The label is
-      // centred and its band is symmetric, so in all four directions the two
-      // colours split it evenly at half travel — which makes 0.5 the balance
-      // point, not an approximation of one. It is not the moment the fill
-      // *covers* the text: with a glyph 0.4 of the key tall, the fill touches
-      // it at 0.3 and hides it at 0.7.
-      labelFill: contrastingLabel(ratio >= 0.5 ? fillColor : baseFill),
+      labelFill: OVERLAY_TOKENS.keyLabel,
+      labelOutline: OVERLAY_TOKENS.keyLabelInverted,
+      labelOutlineWidth: h * OVERLAY_TOKENS.keyLabelRatio * LABEL_OUTLINE_RATIO,
       fontFamily: key.style.fontFamily,
       fontWeight: key.style.fontWeight,
       // Proportional: a frozen pixel size breaks on resize and becomes

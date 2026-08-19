@@ -70,14 +70,18 @@ describe('KeyboardView', () => {
     expect(queryByText('1023')).toBeNull();
   });
 
-  it('inverts the label as soon as the light fill moves underneath', () => {
-    const { container } = render(KeyboardView, {
-      props: { config, frame: [[174, 900, 0] as const] },
-    });
+  it('keeps one label colour and outlines it, whatever sits behind', () => {
+    const shallow = render(KeyboardView, { props: { config, frame: [] } });
+    const shallowLabel = shallow.container.querySelector('text')!;
+    expect(shallowLabel.getAttribute('fill')).toBe(OVERLAY_TOKENS.keyLabel);
+    cleanup();
 
-    expect(container.querySelector('text')?.getAttribute('fill')).toBe(
-      OVERLAY_TOKENS.keyLabelInverted,
-    );
+    const deep = render(KeyboardView, { props: { config, frame: [[174, 900, 1] as const] } });
+    const deepLabel = deep.container.querySelector('text')!;
+
+    expect(deepLabel.getAttribute('fill')).toBe(OVERLAY_TOKENS.keyLabel);
+    expect(deepLabel.getAttribute('stroke')).toBe(OVERLAY_TOKENS.keyLabelInverted);
+    expect(deepLabel.getAttribute('paint-order')).toBe('stroke fill');
   });
 });
 

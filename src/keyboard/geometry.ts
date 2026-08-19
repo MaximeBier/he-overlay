@@ -184,6 +184,10 @@ export function placeNewKey(
       const reference = BY_USAGE.get(key.usage);
       if (!reference) continue;
       const distance = Math.abs(reference.x - geometry.x) + Math.abs(reference.y - geometry.y);
+      // Strictly closer, so ties go to the first key learned. Ties are
+      // common — A and D are equidistant from S — and the winner therefore
+      // depends on an order the user cannot see. It is deterministic and the
+      // result is sane either way; it is not an asymmetry to "fix".
       if (distance < nearest) {
         nearest = distance;
         anchor = { key, geometry: reference };

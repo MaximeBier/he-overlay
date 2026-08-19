@@ -42,12 +42,19 @@
         stroke={key.borderColor}
         stroke-dasharray={decorations && key.axis ? '3 2' : undefined}
       />
+      <!-- `paint-order` puts the outline under the glyph rather than over it,
+           so the stroke thickens the letter outward instead of eating into it.
+           One fixed label colour, readable on any fill. -->
       <text
         x={key.x + key.w / 2}
         y={key.y + key.h / 2}
         text-anchor="middle"
         dominant-baseline="middle"
         fill={key.labelFill}
+        stroke={key.labelOutline}
+        stroke-width={key.labelOutlineWidth}
+        stroke-linejoin="round"
+        paint-order="stroke fill"
         font-family={key.fontFamily}
         font-weight={key.fontWeight}
         font-size={key.fontSize}

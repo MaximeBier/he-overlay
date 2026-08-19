@@ -156,6 +156,17 @@
     }
   }
 
+  /**
+   * A number typed into a field, or `null` when it was left empty.
+   *
+   * `<input type="number">` reports `''` both for empty and for unparseable,
+   * and `+''` is `0` — not `NaN`. Clearing X to retype it therefore used to
+   * teleport the key to the origin, persist it and broadcast it, on the blur.
+   */
+  function typed(input: HTMLInputElement): number | null {
+    return input.value === '' ? null : Number(input.value);
+  }
+
   const unit = $derived(shown.style.unit);
   const gap = $derived(shown.style.gap);
 </script>
@@ -206,7 +217,11 @@
             type="number"
             step={GRID}
             value={single.x}
-            onchange={(e) => onChange(moveKey(config, single.id, +e.currentTarget.value, single.y))}
+            onchange={(e) => {
+              const x = typed(e.currentTarget);
+              if (x === null) e.currentTarget.value = String(single.x);
+              else onChange(moveKey(config, single.id, x, single.y));
+            }}
           />
         </label>
         <label>
@@ -215,7 +230,11 @@
             type="number"
             step={GRID}
             value={single.y}
-            onchange={(e) => onChange(moveKey(config, single.id, single.x, +e.currentTarget.value))}
+            onchange={(e) => {
+              const y = typed(e.currentTarget);
+              if (y === null) e.currentTarget.value = String(single.y);
+              else onChange(moveKey(config, single.id, single.x, y));
+            }}
           />
         </label>
       {/if}
@@ -227,8 +246,11 @@
           step={GRID}
           min={GRID}
           value={selection[0]!.w}
-          onchange={(e) =>
-            onChange(resizeKeys(config, selectedIds, +e.currentTarget.value, selection[0]!.h))}
+          onchange={(e) => {
+            const w = typed(e.currentTarget);
+            if (w === null) e.currentTarget.value = String(selection[0]!.w);
+            else onChange(resizeKeys(config, selectedIds, w, selection[0]!.h));
+          }}
         />
       </label>
       <label>
@@ -238,8 +260,11 @@
           step={GRID}
           min={GRID}
           value={selection[0]!.h}
-          onchange={(e) =>
-            onChange(resizeKeys(config, selectedIds, selection[0]!.w, +e.currentTarget.value))}
+          onchange={(e) => {
+            const h = typed(e.currentTarget);
+            if (h === null) e.currentTarget.value = String(selection[0]!.h);
+            else onChange(resizeKeys(config, selectedIds, selection[0]!.w, h));
+          }}
         />
       </label>
 
