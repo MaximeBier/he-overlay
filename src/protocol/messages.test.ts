@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { envelope, parseMessage, PROTOCOL_VERSION } from './messages';
+import { envelope, foreignVersion, parseMessage, PROTOCOL_VERSION } from './messages';
 
 describe('protocol envelope', () => {
   it('wraps a message under the heOverlay key', () => {
@@ -85,5 +85,36 @@ describe('a frame is numbers the renderer will divide by', () => {
 
   it('rejects an identifier that is not a finite number', () => {
     expect(parseMessage({ heOverlay: { v: 1, t: 'frame', k: [[Number.NaN, 10, 0]] } })).toBeNull();
+  });
+});
+
+describe('naming a version we cannot read', () => {
+  it('returns the version of a message plainly meant for us', () => {
+    expect(foreignVersion({ heOverlay: { v: 7, t: 'hello' } })).toBe(7);
+  });
+
+  it('says nothing about a message at our own version', () => {
+    expect(foreignVersion({ heOverlay: { v: PROTOCOL_VERSION, t: 'hello', id: 'a' } })).toBeNull();
+  });
+
+  it('says nothing about another application entirely', () => {
+    // OBS carries everyone's custom events. Reporting "an overlay is on
+    // protocol v3" because some other tool broadcast its own envelope would
+    // send someone reloading a page that was never ours.
+    expect(foreignVersion({ someOtherApp: { v: 3 } })).toBeNull();
+    expect(foreignVersion({ heOverlay: 'not an object' })).toBeNull();
+    expect(foreignVersion(null)).toBeNull();
+    expect(foreignVersion(42)).toBeNull();
+  });
+
+  it('says nothing when the envelope carries no version at all', () => {
+    expect(foreignVersion({ heOverlay: { t: 'hello' } })).toBeNull();
+    expect(foreignVersion({ heOverlay: { v: 'one', t: 'hello' } })).toBeNull();
+  });
+
+  it('reports a version older than ours as readily as a newer one', () => {
+    // An overlay left open across a deployment is the common case, and it is
+    // behind, not ahead. Only answering for the future would miss it.
+    expect(foreignVersion({ heOverlay: { v: 0, t: 'hello' } })).toBe(0);
   });
 });

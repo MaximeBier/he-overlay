@@ -89,3 +89,25 @@ export function parseMessage(payload: unknown): OverlayMessage | null {
 
   return inner as OverlayMessage;
 }
+
+/**
+ * The protocol version of a message plainly meant for us that we cannot read.
+ *
+ * `parseMessage` returns `null` for these, which is right for processing and
+ * useless for diagnosis: an overlay left open across a deployment goes quiet
+ * with nothing to say why. This serves the journal, never the pipeline.
+ *
+ * Answers for older versions as readily as newer ones — the common case is an
+ * overlay that is *behind*, not ahead.
+ */
+export function foreignVersion(payload: unknown): number | null {
+  if (typeof payload !== 'object' || payload === null) return null;
+
+  const inner = (payload as { heOverlay?: unknown }).heOverlay;
+  // Someone else's custom event is not our overlay on a strange protocol.
+  // Saying it is would send someone reloading a page that was never ours.
+  if (typeof inner !== 'object' || inner === null) return null;
+
+  const { v } = inner as { v?: unknown };
+  return typeof v === 'number' && v !== PROTOCOL_VERSION ? v : null;
+}
