@@ -142,12 +142,27 @@ export const FALLBACK_LAYOUTS: Record<Exclude<LayoutOverride, 'auto'>, LayoutMap
 
 /**
  * `auto` trusts `getLayoutMap()`. The other values are the explicit fallback
- * of §8.6, picked when detection gets it wrong — and that choice always wins
- * over detection, otherwise it would serve no purpose.
+ * of §8.6, picked when detection gets it wrong.
+ *
+ * **The choice corrects detection; it does not replace it.** The tables above
+ * hold seven positions — the ones the three layouts disagree on — and reading
+ * them as the whole answer is a defect found in review on 2026-08-20: forcing
+ * a layout renamed every key outside those seven to its position name, because
+ * `KEYCAP_LABELS` covers no letter and no digit. Someone whose detection was
+ * right for `D` and wrong for `Q` fixed the `Q` and lost the `D`.
+ *
+ * So the forced table answers first and detection answers the rest. On the
+ * seven positions the choice still wins outright, which is the whole point of
+ * having it; everywhere else the layouts agree anyway, so detection is as good
+ * an answer as exists.
  */
 export function resolveLayout(
   override: LayoutOverride,
   detected: LayoutMapLike | null,
 ): LayoutMapLike | null {
-  return override === 'auto' ? detected : FALLBACK_LAYOUTS[override];
+  if (override === 'auto') return detected;
+
+  const forced = FALLBACK_LAYOUTS[override];
+  if (detected === null) return forced;
+  return { get: (code) => forced.get(code) ?? detected.get(code) };
 }

@@ -213,12 +213,26 @@ describe('choosing a layout', () => {
   it('still relabels the keys around it', () => {
     // The guard must not turn into "never relabel anything": the second key
     // was never touched by hand and has to follow.
+    //
+    // Both keys must sit on a position the two layouts disagree on, or the
+    // test proves nothing: the first version used S, which neither table
+    // covers, so it was classed as a manual rename and left alone — and the
+    // assertion passed without a single relabelling taking place. Found in
+    // review on 2026-08-20.
     const azerty = { ...config(), layoutOverride: 'azerty' as const };
-    const named = setKeyLabel(azerty, 1, '↓');
+    const both = {
+      ...azerty,
+      keys: [
+        { ...azerty.keys[0]!, label: 'A' },
+        { ...azerty.keys[1]!, usage: 0x1a, label: 'Z' },
+      ],
+    };
+    const named = setKeyLabel(both, 1, '↓');
 
     const next = setLayoutOverride(named, 'qwerty', AZERTY);
 
-    expect(next.keys[1]?.label).toBe('S');
+    expect(next.keys[0]?.label).toBe('↓');
+    expect(next.keys[1]?.label).toBe('W');
   });
 
   it('relabels a key still wearing what the layout in force gave it', () => {

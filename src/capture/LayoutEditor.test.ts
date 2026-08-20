@@ -297,3 +297,69 @@ describe('LayoutEditor - pressing nothing means nothing selected', () => {
     expect(container.querySelector('[role="dialog"]')).toBeNull();
   });
 });
+
+describe('LayoutEditor - the popover belongs to one selection', () => {
+  const isOpen = (container: Element) => container.querySelector('[role="dialog"]') !== null;
+
+  it('stays closed after the selection is emptied and refilled', async () => {
+    // The sidebar's "Delete N selected keys" empties `selectedIds` the same
+    // way this Delete does. A boolean flag survived it, hidden behind an empty
+    // selection — and the next Ctrl+A reopened a panel nobody had asked for.
+    const { handles, container } = editor();
+
+    handles[0]!.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    await tick();
+    expect(isOpen(container)).toBe(true);
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+    await tick();
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', ctrlKey: true, bubbles: true }));
+    await tick();
+
+    expect(isOpen(container)).toBe(false);
+  });
+
+  it('closes when the selection grows', async () => {
+    const { handles, container } = editor();
+
+    handles[0]!.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    await tick();
+
+    handles[1]!.dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 3, shiftKey: true }),
+    );
+    await tick();
+
+    expect(isOpen(container)).toBe(false);
+  });
+});
+
+describe('LayoutEditor - a half-typed field is not thrown away', () => {
+  it('blurs the popover before taking it down', async () => {
+    // The fields commit on `change`, which fires on blur — and blur is part of
+    // the default action of a press elsewhere, so it happens after this
+    // handler. Unmounting first detaches a focused input, which then fires
+    // neither blur nor change, and the label just typed is lost.
+    const { handles, container } = editor();
+    const stage = container.querySelector('.stage')!;
+
+    handles[0]!.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    await tick();
+
+    const label = container.querySelector<HTMLInputElement>('input[name="label"]')!;
+    label.focus();
+
+    // Asserted on the event, not on `document.activeElement`: removing a
+    // focused element already moves the focus elsewhere, so the obvious
+    // assertion would have passed with or without the fix. Detaching the
+    // input fires no blur at all, which is precisely the defect.
+    const blurred = vi.fn();
+    label.addEventListener('blur', blurred);
+
+    stage.dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 4 }),
+    );
+
+    expect(blurred).toHaveBeenCalled();
+  });
+});

@@ -292,7 +292,7 @@
     gap: 9px;
     inline-size: 248px;
     padding: 13px;
-    background: var(--he-panel, #141722);
+    background: var(--he-popover, #141722);
     border: 1px solid var(--he-border-popover, #262b3a);
     border-radius: var(--he-radius-panel, 6px);
   }

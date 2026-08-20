@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { buildScene, recommendedSize } from './scene';
 import { OVERLAY_TOKENS } from '../styles/tokens';
 import { DEFAULT_STYLE, type ResolvedConfig, type ResolvedKey } from '../config/schema';
+import type { FrameKey } from '../protocol/messages';
 
 const style = {
   restColor: DEFAULT_STYLE.restColor,
@@ -308,10 +309,18 @@ describe('packing the scene into the corner', () => {
     // The fill is computed from the key rectangle, so a translation applied to
     // one and not the other leaves the travel painted where the key used to
     // be — over its neighbour.
-    const scene = buildScene(away(), [[1, 1023, 1]], { pack: true });
-    const packed = scene.keys.find((k) => k.id === 1)!;
+    //
+    // Compared against the unpacked scene, not against the key's own x: with
+    // the default `up` direction the fill inherits x untouched, so
+    // `fill.x === x` holds whether the translation reached it or not. The
+    // first version of this test could not fail. Found in review 2026-08-20.
+    const frame: FrameKey[] = [[1, 512, 1]];
+    const loose = buildScene(away(), frame).keys.find((k) => k.id === 1)!;
+    const packed = buildScene(away(), frame, { pack: true }).keys.find((k) => k.id === 1)!;
 
-    expect(packed.fill.x).toBe(packed.x);
+    expect(loose.x - packed.x).toBe(3 * 100);
+    expect(loose.fill.x - packed.fill.x).toBe(3 * 100);
+    expect(loose.fill.y - packed.fill.y).toBe(1 * 100);
   });
 
   it('survives an empty configuration', () => {

@@ -45,14 +45,20 @@
   } | null = null;
 
   /**
-   * Whether the style popover is open on the current selection.
+   * The selection the popover was opened for, empty when it is closed.
    *
-   * Kept apart from the selection itself, because they answer different
+   * A set of ids rather than a boolean, so that **any** change of selection
+   * closes it — including one made outside this component, which a boolean
+   * could not see. Deleting from the sidebar list emptied `selectedIds` and
+   * left the flag standing; the next Ctrl+A then reopened a panel nobody had
+   * asked for. Found in review on 2026-08-20.
+   *
+   * Kept apart from the selection itself, because the two answer different
    * questions: a click says *which* keys, a deliberate second gesture says
    * *edit them*. Opening on selection would put a panel over the layout at the
    * exact moment one is looking at it (spec §16.5).
    */
-  let editing = $state(false);
+  let editingFor = $state<number[]>([]);
 
   /** What the editor shows: the draft while dragging, the real one otherwise. */
   const shown = $derived(draft ?? config);
@@ -63,7 +69,12 @@
 
   // Hidden for the length of the gesture, not closed: following the key across
   // the stage is unreadable, and staying put covers where the key is going.
-  const popoverVisible = $derived(editing && draft === null && selection.length > 0);
+  const popoverVisible = $derived(
+    draft === null &&
+      selection.length > 0 &&
+      editingFor.length === selectedIds.length &&
+      editingFor.every((id) => selectedIds.includes(id)),
+  );
 
   /** Below the selection's bounding box, in stage pixels. */
   const anchor = $derived({
@@ -73,7 +84,22 @@
 
   function open(id: number) {
     if (!selectedIds.includes(id)) selectedIds = [id];
-    editing = true;
+    editingFor = [...selectedIds];
+  }
+
+  /**
+   * Lets a half-typed field commit before the popover goes away.
+   *
+   * The popover's fields write on `change`, which the browser fires on blur —
+   * and blur is part of the *default action* of a pointerdown elsewhere, so it
+   * happens after this handler. Unmounting the popover here detached the input
+   * while it still held focus, and a detached input fires neither blur nor
+   * change: the label someone had just typed was silently dropped. Blurring
+   * first makes the commit happen while the field is still in the document.
+   */
+  function commitPendingEdit() {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active.closest('.anchor')) active.blur();
   }
 
   /**
@@ -85,8 +111,9 @@
    */
   function onStagePointerDown(event: PointerEvent) {
     if (event.target !== event.currentTarget) return;
+    commitPendingEdit();
     selectedIds = [];
-    editing = false;
+    editingFor = [];
   }
 
   function toggle(id: number) {
@@ -119,10 +146,12 @@
     // Pressing a key outside the selection takes it alone; pressing one inside
     // keeps the group, so the whole group can be dragged.
     if (!selectedIds.includes(id)) {
+      commitPendingEdit();
+      // A new selection is a new subject, and `popoverVisible` closes the
+      // panel on its own once the ids no longer match. Pressing a key already
+      // in the selection changes nothing, which is what lets the popover
+      // survive a drag of the very keys it edits.
       selectedIds = [id];
-      // A new selection is a new subject. Closing here and not on every press
-      // is what lets the popover survive a drag of the keys it edits.
-      editing = false;
     }
 
     draft = config;
@@ -204,7 +233,7 @@
       // One key, two things to undo, so they come off in the order they went
       // on. Clearing the selection first would leave the popover anchored to
       // nothing for the frame before it noticed.
-      if (editing) editing = false;
+      if (editingFor.length > 0) editingFor = [];
       else {
         selectedIds = [];
         // And the focus with it. A handle keeps focus after a click, so
@@ -216,7 +245,6 @@
     if (!typing && event.key === 'Delete' && selectedIds.length > 0) {
       onChange(removeKeys(config, selectedIds));
       selectedIds = [];
-      editing = false;
     }
   }
 
@@ -283,7 +311,7 @@
           {layout}
           {suggestAxis}
           {onDismissSuggestion}
-          onClose={() => (editing = false)}
+          onClose={() => (editingFor = [])}
         />
       </div>
     {/if}
@@ -309,6 +337,15 @@
        paragraph, leaving a blue smear over the layout. Nothing here is text
        anyone means to copy. */
     user-select: none;
+  }
+  /* The drawing is scenery, and it covers the whole stage: without this, a
+     press on the empty space *between* two keys landed on the <svg> and the
+     "pressing bare stage clears the selection" guard never matched — the only
+     place it did was outside the layout's bounding box, which is often
+     nowhere. Found in review on 2026-08-20. The handles are siblings, so they
+     keep their events. */
+  .stage :global(svg) {
+    pointer-events: none;
   }
   .handle {
     position: absolute;

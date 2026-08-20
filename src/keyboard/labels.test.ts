@@ -174,3 +174,32 @@ describe('keycap labels for the keys that print no character', () => {
     expect(labelFor(0x2c, new Map([['Space', ' ']]))).toBe('Space');
   });
 });
+
+describe('resolveLayout - the forced choice corrects, it does not replace', () => {
+  // The three tables hold seven positions. Read as the whole answer, forcing a
+  // layout renamed every other key to its position name: D became KeyD, & became
+  // Digit1. The table says what the layouts *disagree* on; detection still
+  // answers everything else.
+  const detected = new Map([
+    ['KeyQ', 'a'],
+    ['KeyD', 'd'],
+    ['Digit1', '&'],
+  ]);
+
+  it('overrides the positions the table covers', () => {
+    expect(labelFor(0x14, resolveLayout('qwerty', detected))).toBe('Q');
+  });
+
+  it('keeps the detected answer for the positions it does not', () => {
+    expect(labelFor(0x07, resolveLayout('qwerty', detected))).toBe('D');
+  });
+
+  it('leaves nothing to the position name when detection has an answer', () => {
+    expect(labelFor(0x1e, resolveLayout('qwerty', detected))).toBe('&');
+  });
+
+  it('still works alone when detection is unavailable', () => {
+    expect(labelFor(0x14, resolveLayout('azerty', null))).toBe('A');
+    expect(labelFor(0x07, resolveLayout('azerty', null))).toBe('KeyD');
+  });
+});

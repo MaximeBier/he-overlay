@@ -36,22 +36,37 @@
     ['right', '→ Right'],
   ];
 
-  /**
-   * A number typed into a field, or `null` when it was left empty.
-   *
-   * `+''` is `0`, not `NaN`: clearing the size field to retype it would set
-   * every key to zero pixels, persist it and broadcast it. The same guard the
-   * position fields carry, and for the same reason.
-   */
-  function typed(input: HTMLInputElement, fallback: number): number | null {
-    if (input.value !== '') return Number(input.value);
-    input.value = String(fallback);
-    return null;
-  }
+  /** What each size may hold. `min` and `max` bind the spinner, not the keyboard. */
+  const BOUNDS = { unit: { min: 16, max: 200 }, gap: { min: 0, max: 40 } } as const;
 
+  /**
+   * Reads a size field, and refuses to let it out of range.
+   *
+   * `min` and `max` on a number input constrain the arrows and validation, not
+   * what can be typed — and nothing downstream is forgiving. A unit of zero
+   * passes `setGlobalStyle`, is saved, and is broadcast, where
+   * `isExtent(unit)` rejects it and `parseMessage` discards the whole
+   * configuration message: the overlay stays on the last good one and says
+   * nothing. Found in review on 2026-08-20.
+   *
+   * `''` and unparseable text are put back rather than clamped: `+''` is `0`
+   * and `Number('e')` is `NaN`, and someone clearing a field to retype it has
+   * not asked for anything yet.
+   */
   function size(property: 'unit' | 'gap', input: HTMLInputElement) {
-    const value = typed(input, config.style[property]);
-    if (value !== null) onChange(setGlobalStyle(config, property, value));
+    const { min, max } = BOUNDS[property];
+    const typed = Number(input.value);
+
+    if (input.value === '' || !Number.isFinite(typed)) {
+      input.value = String(config.style[property]);
+      return;
+    }
+
+    const value = Math.min(max, Math.max(min, typed));
+    // Written back, so the field never shows a figure the configuration does
+    // not hold — a silent clamp is how someone concludes the setting is broken.
+    input.value = String(value);
+    onChange(setGlobalStyle(config, property, value));
   }
 </script>
 
@@ -120,8 +135,8 @@
         id="global-unit"
         name="unit"
         type="number"
-        min="16"
-        max="200"
+        min={BOUNDS.unit.min}
+        max={BOUNDS.unit.max}
         value={config.style.unit}
         onchange={(event) => size('unit', event.currentTarget)}
       />
@@ -136,8 +151,8 @@
         id="global-gap"
         name="gap"
         type="number"
-        min="0"
-        max="40"
+        min={BOUNDS.gap.min}
+        max={BOUNDS.gap.max}
         value={config.style.gap}
         onchange={(event) => size('gap', event.currentTarget)}
       />
@@ -151,7 +166,7 @@
     display: grid;
     gap: 10px;
     padding: 16px 18px;
-    background: var(--he-panel, #141722);
+    background: var(--he-popover, #141722);
     border: 1px solid var(--he-border, #1b1e27);
     border-radius: var(--he-radius-panel, 6px);
   }
