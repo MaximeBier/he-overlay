@@ -7,6 +7,7 @@
     config,
     frame,
     decorations = false,
+    pack = false,
   }: {
     config: ResolvedConfig;
     frame: readonly FrameKey[];
@@ -15,9 +16,15 @@
      * False by default - the overlay must never display them (spec 16.3).
      */
     decorations?: boolean;
+    /**
+     * Pull the keys into the top-left corner (spec §5.4). On for the
+     * broadcast, off for the editor, whose handles are positioned from the
+     * raw coordinates and would drift away from a packed drawing.
+     */
+    pack?: boolean;
   } = $props();
 
-  const scene = $derived(buildScene(config, frame));
+  const scene = $derived(buildScene(config, frame, { pack }));
 </script>
 
 <svg width={scene.width} height={scene.height} viewBox={`0 0 ${scene.width} ${scene.height}`}>

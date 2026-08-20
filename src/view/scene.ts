@@ -86,7 +86,31 @@ function fillRect(
   }
 }
 
-export function buildScene(config: ResolvedConfig, frame: readonly FrameKey[]): Scene {
+export interface SceneOptions {
+  /**
+   * Translate the scene so the topmost key touches the top edge and the
+   * leftmost the left edge (spec §5.4).
+   *
+   * On for the broadcast, off for the editor, and the asymmetry is the point.
+   * Four arrows arranged in the middle of the work surface must arrive in the
+   * corner of the OBS source, or the streamer is handed a source that is
+   * mostly transparent by construction and has to crop it by hand. The editor
+   * cannot do the same: the keys have to stay under the cursor dragging them,
+   * and moving the one that defines an edge would shift every other key on the
+   * stage at once.
+   *
+   * A property of the rendering, never of the configuration. Writing packed
+   * positions back would pull the layout a little further into the corner on
+   * every key removed.
+   */
+  pack?: boolean;
+}
+
+export function buildScene(
+  config: ResolvedConfig,
+  frame: readonly FrameKey[],
+  { pack = false }: SceneOptions = {},
+): Scene {
   const { unit, gap } = config;
   const states = new Map(frame.map(([id, travel, active]) => [id, { travel, active }]));
 
@@ -103,6 +127,12 @@ export function buildScene(config: ResolvedConfig, frame: readonly FrameKey[]): 
     return true;
   });
 
+  // Guarded on the empty case: `Math.min()` of nothing is Infinity, every
+  // coordinate downstream becomes NaN, and the result is an SVG that renders
+  // blank without a single error to say why.
+  const originX = pack && unique.length > 0 ? Math.min(...unique.map((key) => key.x)) : 0;
+  const originY = pack && unique.length > 0 ? Math.min(...unique.map((key) => key.y)) : 0;
+
   const keys = unique.map((key): SceneKey => {
     // A key missing from the frame means zero travel and inactive (spec 7.3).
     const state = states.get(key.id) ?? { travel: 0, active: 0 as const };
@@ -113,8 +143,12 @@ export function buildScene(config: ResolvedConfig, frame: readonly FrameKey[]): 
       ? Math.min(1, Math.max(0, state.travel / MAX_TRAVEL))
       : 0;
 
-    const x = key.x * unit + gap / 2;
-    const y = key.y * unit + gap / 2;
+    // The translation is applied here, once, and everything else — the fill
+    // rectangle, the label, the measured size — is derived from these two. A
+    // scene that shifted the key and not its fill would paint the travel over
+    // the neighbour.
+    const x = (key.x - originX) * unit + gap / 2;
+    const y = (key.y - originY) * unit + gap / 2;
     // A gap wider than the key itself is the user's to set, and a rect with a
     // negative width is an SVG error rather than a small key.
     const w = Math.max(0, key.w * unit - gap);
@@ -133,8 +167,8 @@ export function buildScene(config: ResolvedConfig, frame: readonly FrameKey[]): 
     const fillColor = actuated || key.mode === 'axis' ? key.style.activeColor : key.style.fillColor;
     const baseFill = actuated ? key.style.fillColor : key.style.restColor;
 
-    width = Math.max(width, (key.x + key.w) * unit);
-    height = Math.max(height, (key.y + key.h) * unit);
+    width = Math.max(width, (key.x - originX + key.w) * unit);
+    height = Math.max(height, (key.y - originY + key.h) * unit);
 
     return {
       id: key.id,
@@ -166,4 +200,19 @@ export function buildScene(config: ResolvedConfig, frame: readonly FrameKey[]): 
   });
 
   return { width, height, keys };
+}
+
+/**
+ * Size to give the browser source in OBS, in pixels.
+ *
+ * The packed bounding box, never the raw one: an unpacked measurement
+ * describes an area whose top and left are empty by construction, and handing
+ * that figure to someone sizing a source is worse than handing them none.
+ *
+ * Measured by building the scene rather than by a formula of its own, so the
+ * number quoted and the pixels drawn cannot drift apart.
+ */
+export function recommendedSize(config: ResolvedConfig): { width: number; height: number } {
+  const { width, height } = buildScene(config, [], { pack: true });
+  return { width, height };
 }

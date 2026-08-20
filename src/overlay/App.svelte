@@ -58,5 +58,5 @@
   with it the question of when to invalidate one.
 -->
 {#if config}
-  <KeyboardView {config} {frame} />
+  <KeyboardView {config} {frame} pack />
 {/if}
