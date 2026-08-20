@@ -3,6 +3,7 @@
   import { effectiveStyle, overriddenKeys } from '../config/resolve';
   import { removeKeys } from './learn';
   import { moveKey, resizeKeys, GRID } from './layout';
+  import { labelFor, type LayoutMapLike } from '../keyboard/labels';
   import type { FillDirection, KeyMode, KeyStyle, OverlayConfig } from '../config/schema';
 
   /**
@@ -15,11 +16,19 @@
     selectedIds,
     onChange,
     onClose,
+    layout = null,
+    suggestAxis = false,
+    onDismissSuggestion = () => {},
   }: {
     config: OverlayConfig;
     selectedIds: number[];
     onChange: (next: OverlayConfig) => void;
     onClose: () => void;
+    /** What the keyboard says this position produces, for the way back. */
+    layout?: LayoutMapLike | null;
+    /** The key travels its whole depth and never fires (spec §7.4). */
+    suggestAxis?: boolean;
+    onDismissSuggestion?: () => void;
   } = $props();
 
   const selection = $derived(config.keys.filter((key) => selectedIds.includes(key.id)));
@@ -33,6 +42,19 @@
   const effective = $derived(lead ? effectiveStyle(config.style, lead) : null);
   const overridden = $derived(lead ? overriddenKeys(lead) : []);
   const single = $derived(selection.length === 1 ? selection[0]! : null);
+
+  /**
+   * The label the detected layout gives this position, when it differs from
+   * what the key wears — that is, when the key has been renamed by hand.
+   *
+   * Null with no layout: there is nothing to go back to, and the position name
+   * `labelFor` would produce is worse than anything the user typed.
+   */
+  const detectedLabel = $derived.by(() => {
+    if (!single || layout === null) return null;
+    const detected = labelFor(single.usage, layout);
+    return detected === single.label ? null : detected;
+  });
   const mode = $derived<KeyMode>(
     selection.length > 0 && selection.every((key) => key.mode === 'axis') ? 'axis' : 'key',
   );
@@ -79,6 +101,34 @@
         </button>
       {/each}
     </div>
+
+    {#if suggestAxis}
+      <!-- Worded as the observation, not as a conclusion: the keyboard says
+           this key travelled its whole depth and never fired. It does not say
+           the key is bound to a stick, and nothing here can find out. Never a
+           switch, always an offer (spec §7.4). -->
+      <p class="suggestion" data-suggestion>
+        This key does not send a keystroke.
+        <span class="actions">
+          <button
+            type="button"
+            class="link"
+            data-accept-suggestion
+            onclick={() => onChange(setKeyMode(config, selectedIds, 'axis'))}
+          >
+            Show as axis
+          </button>
+          <button
+            type="button"
+            class="link quiet"
+            data-dismiss-suggestion
+            onclick={onDismissSuggestion}
+          >
+            Keep as key
+          </button>
+        </span>
+      </p>
+    {/if}
 
     <div class="row">
       <label for="key-activeColor">Active</label>
@@ -132,6 +182,23 @@
           onchange={(event) => onChange(setKeyLabel(config, single.id, event.currentTarget.value))}
         />
       </div>
+
+      {#if detectedLabel !== null}
+        <!-- The counterpart of "Reset to global" for the one property that is
+             not a style. Without it a rename only comes undone by retyping the
+             detected label exactly — and a layout change will not do it, since
+             a typed name is deliberately left alone (spec §8.6). -->
+        <div class="row end">
+          <button
+            type="button"
+            class="link"
+            data-reset="label"
+            onclick={() => onChange(setKeyLabel(config, single.id, detectedLabel))}
+          >
+            Reset to detected · {detectedLabel}
+          </button>
+        </div>
+      {/if}
 
       <!-- Dragging alone becomes frustrating the moment two keys have to line
            up exactly, which is why the spec asks for numeric fields (§8.7).
@@ -284,6 +351,31 @@
   }
   .segmented.small button {
     padding: 4px 8px;
+  }
+  .suggestion {
+    margin: 0;
+    display: grid;
+    gap: 6px;
+    font-size: 11.5px;
+    line-height: 1.4;
+    color: var(--he-text-muted, #8b90a0);
+    background: var(--he-surface, #151823);
+    border: 1px solid var(--he-border-control, #232838);
+    border-radius: var(--he-radius, 4px);
+    padding: 8px 9px;
+  }
+  .actions {
+    display: flex;
+    gap: 12px;
+  }
+  .row.end {
+    justify-content: flex-end;
+  }
+  .link.quiet {
+    color: var(--he-text-faint, #5a5f70);
+  }
+  .link.quiet:hover {
+    color: var(--he-text-muted, #8b90a0);
   }
   .link {
     font: inherit;

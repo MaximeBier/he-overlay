@@ -5,6 +5,7 @@
   import { moveKeysBy, pixelsToUnits } from './layout';
   import { removeKeys } from './learn';
   import type { OverlayConfig } from '../config/schema';
+  import type { LayoutMapLike } from '../keyboard/labels';
   import type { FrameKey } from '../protocol/messages';
 
   let {
@@ -12,11 +13,18 @@
     frame,
     selectedIds = $bindable([]),
     onChange,
+    layout = null,
+    suggestAxis = false,
+    onDismissSuggestion = () => {},
   }: {
     config: OverlayConfig;
     frame: readonly FrameKey[];
     selectedIds: number[];
     onChange: (next: OverlayConfig) => void;
+    /** Passed straight through to the popover; the editor makes no use of it. */
+    layout?: LayoutMapLike | null;
+    suggestAxis?: boolean;
+    onDismissSuggestion?: () => void;
   } = $props();
 
   /**
@@ -268,7 +276,15 @@
 
     {#if popoverVisible}
       <div class="anchor" style:left={`${anchor.x}px`} style:top={`${anchor.y + gap}px`}>
-        <KeyPopover {config} {selectedIds} {onChange} onClose={() => (editing = false)} />
+        <KeyPopover
+          {config}
+          {selectedIds}
+          {onChange}
+          {layout}
+          {suggestAxis}
+          {onDismissSuggestion}
+          onClose={() => (editing = false)}
+        />
       </div>
     {/if}
   </div>

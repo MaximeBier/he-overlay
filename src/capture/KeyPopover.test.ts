@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, cleanup } from '@testing-library/svelte';
 import KeyPopover from './KeyPopover.svelte';
-import { setKeyStyle } from '../config/edit';
+import { setKeyLabel, setKeyStyle } from '../config/edit';
 import { defaultConfig, type OverlayConfig } from '../config/schema';
 
 afterEach(cleanup);
@@ -160,5 +160,104 @@ describe('KeyPopover - fine adjustment', () => {
     change(container.querySelector<HTMLInputElement>('input[name="width"]')!, '2');
 
     expect(onChange.mock.calls[0]![0].keys.map((k: { w: number }) => k.w)).toEqual([2, 2]);
+  });
+});
+
+describe('KeyPopover - the axis suggestion', () => {
+  const suggested = (config = twoKeys(), selectedIds = [1]) => {
+    const onChange = vi.fn();
+    const onDismissSuggestion = vi.fn();
+    const view = render(KeyPopover, {
+      props: {
+        config,
+        selectedIds,
+        onChange,
+        onClose: vi.fn(),
+        suggestAxis: true,
+        onDismissSuggestion,
+      },
+    });
+    return { ...view, onChange, onDismissSuggestion };
+  };
+
+  it('says nothing unless asked to', () => {
+    const { container } = popover();
+
+    expect(container.querySelector('[data-suggestion]')).toBeNull();
+  });
+
+  it('describes what was observed, not a mapping it cannot know', () => {
+    // The keyboard says a key travelled and never fired. It does not say the
+    // key is bound to a stick, and nothing on this side can find out
+    // (spec §7.4).
+    const { container } = suggested();
+
+    expect(container.querySelector('[data-suggestion]')!.textContent).toContain(
+      'does not send a keystroke',
+    );
+  });
+
+  it('switches the mode when accepted', () => {
+    const { container, onChange } = suggested();
+
+    container.querySelector<HTMLButtonElement>('button[data-accept-suggestion]')!.click();
+
+    expect(onChange.mock.calls[0]![0].keys[0].mode).toBe('axis');
+  });
+
+  it('changes nothing when declined', () => {
+    // A suggestion, never a switch: declining has to leave the configuration
+    // exactly as it was.
+    const { container, onChange, onDismissSuggestion } = suggested();
+
+    container.querySelector<HTMLButtonElement>('button[data-dismiss-suggestion]')!.click();
+
+    expect(onDismissSuggestion).toHaveBeenCalled();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+describe('KeyPopover - going back to the detected label', () => {
+  const AZERTY = new Map([['KeyQ', 'a']]);
+
+  const withLayout = (config: OverlayConfig, layout: Map<string, string> | null) => {
+    const onChange = vi.fn();
+    const view = render(KeyPopover, {
+      props: { config, selectedIds: [1], onChange, onClose: vi.fn(), layout },
+    });
+    return { ...view, onChange };
+  };
+
+  const resetLabel = (container: Element) =>
+    container.querySelector<HTMLButtonElement>('button[data-reset="label"]');
+
+  it('offers nothing while the label is the detected one', () => {
+    const config = twoKeys();
+    config.keys[0]!.label = 'A';
+
+    expect(resetLabel(withLayout(config, AZERTY).container)).toBeNull();
+  });
+
+  it('offers the way back once the key has been renamed', () => {
+    const renamed = setKeyLabel(twoKeys(), 1, 'Sprint');
+
+    expect(resetLabel(withLayout(renamed, AZERTY).container)).not.toBeNull();
+  });
+
+  it('puts the detected label back', () => {
+    const renamed = setKeyLabel(twoKeys(), 1, 'Sprint');
+    const { container, onChange } = withLayout(renamed, AZERTY);
+
+    resetLabel(container)!.click();
+
+    expect(onChange.mock.calls[0]![0].keys[0].label).toBe('A');
+  });
+
+  it('offers nothing when no layout was detected', () => {
+    // There is nothing to go back to, and the position name it would produce
+    // is worse than whatever the user typed.
+    const renamed = setKeyLabel(twoKeys(), 1, 'Sprint');
+
+    expect(resetLabel(withLayout(renamed, null).container)).toBeNull();
   });
 });

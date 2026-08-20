@@ -15,6 +15,7 @@
   import { addLearnedKey, pickLearned, removeKey, removeKeys } from './learn';
   import { loadLayoutMap, resolveLayout, type LayoutMapLike } from '../keyboard/labels';
   import { setLayoutOverride } from '../config/edit';
+  import { createAxisSuggester } from './suggest';
   import { resolve } from '../config/resolve';
   import { recommendedSize } from '../view/scene';
   import KeyLearner from './KeyLearner.svelte';
@@ -48,6 +49,21 @@
   // The packed size, which is the only one worth quoting: the raw box has an
   // empty top and left by construction (spec §5.4).
   const size = $derived(recommendedSize(resolve(config)));
+
+  const suggester = createAxisSuggester();
+  /**
+   * The configured keys the suggester currently speaks for.
+   *
+   * A snapshot, refreshed only when the suggester says it learned something.
+   * Reports arrive at up to a thousand a second, and asking it on every one of
+   * them would rebuild this list at report rate for an answer that changes
+   * perhaps twice a session.
+   */
+  let suggestedIds = $state<number[]>([]);
+
+  function refreshSuggestions() {
+    suggestedIds = config.keys.map((key) => key.id).filter((id) => suggester.suggests(id));
+  }
 
   let rate = $state(0);
   let overlayCount = $state(0);
@@ -239,6 +255,9 @@
     // Only the configured keys travel: the overlay filters nothing (spec §6).
     selectedIds: () => config.keys.map((key) => key.id),
     onEntries: (entries) => {
+      // Before the learning guard: a key is watched from the moment it is
+      // seen, not from the moment someone happens to be adding one.
+      if (suggester.observe(entries)) refreshSuggestions();
       if (!learning) return;
       const learned = pickLearned(entries);
       if (!learned) return;
@@ -321,7 +340,20 @@
 
   <!-- The same component OBS renders, from the same resolved shape — with the
        editor decorations on, which the broadcast never gets. -->
-  <LayoutEditor {config} {frame} bind:selectedIds onChange={updateConfig} />
+  <LayoutEditor
+    {config}
+    {frame}
+    bind:selectedIds
+    onChange={updateConfig}
+    layout={activeLayout}
+    suggestAxis={selectedIds.length === 1 && suggestedIds.includes(selectedIds[0]!)}
+    onDismissSuggestion={() => {
+      // Proposing a mode for a heterogeneous group would mean nothing, so the
+      // suggestion is single-selection only — and so is dismissing it.
+      suggester.dismiss(selectedIds[0]!);
+      refreshSuggestions();
+    }}
+  />
 
   <!-- Global appearance. Per-key overrides live in the popover the editor
        anchors to the selection, never here (spec §16.4). -->
