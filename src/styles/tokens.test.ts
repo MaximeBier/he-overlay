@@ -24,6 +24,11 @@ describe('tokens', () => {
     expect(DEFAULT_STYLE.opacity).toBe(OVERLAY_TOKENS.keyOpacity);
     expect(DEFAULT_STYLE.fontFamily).toBe(OVERLAY_TOKENS.keyFontFamily);
     expect(DEFAULT_STYLE.fontWeight).toBe(OVERLAY_TOKENS.keyFontWeight);
+    // Sizes come from the mockup like the colours do, so they are read from
+    // here rather than written a second time in the schema. They were 56 and 6
+    // until the handoff of 2026-08-20 fixed the tile at 72 with an 8 px gap.
+    expect(DEFAULT_STYLE.unit).toBe(OVERLAY_TOKENS.keyUnit);
+    expect(DEFAULT_STYLE.gap).toBe(OVERLAY_TOKENS.keyGap);
   });
 
   it('clearly distinguishes rest from actuation', () => {
@@ -35,7 +40,7 @@ describe('tokens', () => {
 
   it('gives the label a usable height at stream size', () => {
     // 40% of a 26 px key at 1080p is ~10 px: below that, the label does not
-    // survive video compression (mockup 4b).
+    // survive video compression (handoff, key cap 29 px on a 72 px tile).
     expect(OVERLAY_TOKENS.keyLabelRatio).toBeGreaterThanOrEqual(0.35);
     expect(OVERLAY_TOKENS.keyLabelRatio).toBeLessThanOrEqual(0.5);
   });

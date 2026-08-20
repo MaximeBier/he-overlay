@@ -219,7 +219,7 @@ describe('the label keeps one colour, whatever moves behind it', () => {
   it('outlines it in the opposite shade, so it survives any fill', () => {
     const scene = buildScene(config(key()), [[174, 1023, 1]]);
 
-    expect(scene.keys[0]?.labelOutline).toBe(OVERLAY_TOKENS.keyLabelInverted);
+    expect(scene.keys[0]?.labelOutline).toBe(OVERLAY_TOKENS.keyLabelOutline);
     expect(scene.keys[0]?.labelOutlineWidth).toBeGreaterThan(0);
   });
 

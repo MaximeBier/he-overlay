@@ -25,7 +25,7 @@ describe('createConfigBroadcaster', () => {
     expect(broadcast).toHaveBeenCalledWith({
       v: 1,
       t: 'config',
-      config: expect.objectContaining({ unit: 56, gap: 6, keys: [] }),
+      config: expect.objectContaining({ unit: 72, gap: 8, keys: [] }),
     });
   });
 

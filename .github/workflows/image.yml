@@ -29,6 +29,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # The woff2 files are committed, so nothing forces them to match the
+      # packages they came from. Without this, a Dependabot bump of
+      # @fontsource merges green and changes nothing at all in what ships.
+      - run: ./scripts/sync-fonts.sh --check
       - run: npm test
       - run: npm run check
       - run: npm run build

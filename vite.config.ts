@@ -17,6 +17,14 @@ export default defineConfig({
         capture: resolve(import.meta.dirname, 'capture.html'),
         overlay: resolve(import.meta.dirname, 'overlay.html'),
       },
+      output: {
+        // Rollup names a shared chunk after one of the modules inside it, and
+        // that name is chosen by the bundler, not by meaning: importing a
+        // stylesheet from both entry points was enough to make the 47 kB
+        // Svelte runtime appear as `fonts-broadcast.js`. Anyone reading a
+        // network tab would have concluded the fonts weighed 47 kB.
+        chunkFileNames: 'assets/shared-[hash].js',
+      },
     },
   },
   test: {

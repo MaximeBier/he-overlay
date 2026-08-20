@@ -12,9 +12,18 @@ export const OVERLAY_TOKENS = {
   keyActive: '#7C9EFF',
   keyFill: '#3D4A78',
   keyLabel: '#DDE1E9',
-  /** Inverted contrast, for when the fill passes under the text. */
-  keyLabelInverted: '#0E1015',
+  /**
+   * Outline drawn around the label, never a second label colour.
+   *
+   * Named `Inverted` until 2026-08-20, when the contrast computed from the
+   * fill was dropped: it worked, but the text flickered while a key travelled
+   * and the eye followed the flicker instead of the key (spec §16.3).
+   */
+  keyLabelOutline: '#0E1015',
   keyRadius: 5,
+  /** Tile side and spacing in pixels, from the mockup: 72 with an 8 px gap. */
+  keyUnit: 72,
+  keyGap: 8,
   keyOpacity: 1,
   keyFontFamily: "'Archivo', system-ui, sans-serif",
   keyFontWeight: 700,

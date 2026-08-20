@@ -1,0 +1,31 @@
+/*
+ * The one face that goes on air: Archivo 700, the weight the key labels use
+ * (`OVERLAY_TOKENS.keyFontWeight`). Loaded by both entry points, because the
+ * capture page shows the same preview OBS shows.
+ *
+ * Split from `fonts-ui.css` for the reason `tokens.ts` is split from
+ * `ui-tokens.ts` (spec §5.1): the overlay is the bundle OBS keeps loaded for a
+ * whole stream, and it has no business downloading a monospace face it never
+ * draws.
+ *
+ * Self-hosted, and it has to be: our own CSP says `font-src 'self'`
+ * (docker/security-headers.conf), so a font provider is not merely undesirable
+ * here — it is blocked. Nothing would say so at a glance either, since every
+ * stack below falls back to `system-ui` and renders a page that looks fine and
+ * is wrong.
+ *
+ * `swap` rather than `block`: a font that fails to arrive must never cost the
+ * labels themselves. A frame of system sans-serif at overlay startup is
+ * invisible next to a stream that begins with no letters on the keys at all.
+ *
+ * Only `woff2`. Both targets are Chromium — WebHID requires it for capture,
+ * and OBS embeds CEF — so a `woff` twin would double the shipped bytes for
+ * nobody.
+ */
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../assets/fonts/archivo-latin-700-normal.woff2') format('woff2');
+}

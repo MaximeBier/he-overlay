@@ -153,7 +153,7 @@ export function buildScene(config: ResolvedConfig, frame: readonly FrameKey[]): 
       borderColor: actuated ? key.style.activeColor : key.style.borderColor,
       fill: { ...fillRect(x, y, w, h, ratio, key.style.fillDirection), color: fillColor },
       labelFill: OVERLAY_TOKENS.keyLabel,
-      labelOutline: OVERLAY_TOKENS.keyLabelInverted,
+      labelOutline: OVERLAY_TOKENS.keyLabelOutline,
       labelOutlineWidth: h * OVERLAY_TOKENS.keyLabelRatio * LABEL_OUTLINE_RATIO,
       fontFamily: key.style.fontFamily,
       fontWeight: key.style.fontWeight,

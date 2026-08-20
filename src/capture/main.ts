@@ -1,6 +1,8 @@
 import { mount } from 'svelte';
 import App from './App.svelte';
 import { applyTokens } from '../styles/ui-tokens';
+import '../styles/fonts-broadcast.css';
+import '../styles/fonts-ui.css';
 import '../styles/app.css';
 
 // Only the capture page. The overlay consumes no interface token, and handing

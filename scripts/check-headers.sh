@@ -87,6 +87,25 @@ else
   fail "hashed assets are not cached forever"
 fi
 
+# The label face, fetched for real. Our own CSP says `font-src 'self'`, so the
+# font has to be served from this image or the labels quietly fall back to the
+# system sans-serif — a page that renders, looks deliberate, and is not what
+# was designed. Nothing in a browser announces it either: a missing font is a
+# console line at most.
+sheet=$(curl -sS "${BASE}/overlay.html" | grep -oE '/assets/[^"]+\.css' | head -1)
+if [ -z "$sheet" ]; then
+  fail "overlay.html references no stylesheet — the label face cannot load"
+else
+  font=$(curl -sS "${BASE}${sheet}" | grep -oE '/assets/archivo[^)"]+\.woff2' | head -1)
+  if [ -z "$font" ]; then
+    fail "the overlay stylesheet declares no Archivo face"
+  elif curl -fsSI "${BASE}${font}" >/dev/null 2>&1; then
+    ok "the on-air font is served from this origin"
+  else
+    fail "the on-air font is referenced but not served (${font})"
+  fi
+fi
+
 # A query string reaches the access log verbatim. Since we host the page, an
 # old-style URL carrying ?password=… would file our users' OBS credentials on
 # our own server. The fragment is the real fix (src/overlay/params.ts); this

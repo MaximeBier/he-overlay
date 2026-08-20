@@ -46,5 +46,26 @@ absent 'IntlBackslash' 'the ISO geometry table'
 absent 'ContextMenu' 'the ISO geometry table entries'
 absent 'getLayoutMap' 'the layout detection'
 
+# Stylesheets, checked the same way and for the same reason. Fonts are the one
+# resource where a leak is measured in tens of kilobytes rather than bytes, and
+# `@font-face` makes it easy: one stylesheet imported from the wrong entry
+# point puts four interface faces on a page that draws a single weight.
+mapfile -t sheets < <(grep -oE 'href="/assets/[^"]+\.css"' dist/overlay.html |
+  sed -E 's/.*"(\/assets\/[^"]+)".*/dist\1/' | sort -u)
+
+[ "${#sheets[@]}" -gt 0 ] || fail "no stylesheet found in dist/overlay.html — Archivo 700 is missing"
+echo "overlay loads: ${sheets[*]}"
+
+grep -qF 'archivo-latin-700' "${sheets[@]}" ||
+  fail "the overlay draws its labels in Archivo 700 and does not load the face"
+ok   "the on-air face is loaded"
+
+for face in archivo-latin-400 archivo-latin-500 archivo-latin-600 ibm-plex-mono; do
+  if grep -qF "$face" "${sheets[@]}"; then
+    fail "the interface face $face reaches the overlay bundle"
+  fi
+done
+ok   "the interface faces stay out of the overlay bundle"
+
 echo
 echo "Overlay bundle is clean."

@@ -133,9 +133,10 @@ export const DEFAULT_STYLE: GlobalStyle = {
   radius: OVERLAY_TOKENS.keyRadius,
   fontFamily: OVERLAY_TOKENS.keyFontFamily,
   fontWeight: OVERLAY_TOKENS.keyFontWeight,
-  // Layout dimensions rather than graphic choices, and the user sets them.
-  unit: 56,
-  gap: 6,
+  // Layout dimensions, and the user still sets them — but their starting
+  // point comes from the mockup like every other value here.
+  unit: OVERLAY_TOKENS.keyUnit,
+  gap: OVERLAY_TOKENS.keyGap,
 };
 
 export function defaultConfig(): OverlayConfig {

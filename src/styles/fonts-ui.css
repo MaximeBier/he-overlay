@@ -1,0 +1,45 @@
+/*
+ * Settings interface only — never imported by the overlay. See
+ * `fonts-broadcast.css` for the face the two pages share and for why these are
+ * self-hosted at all.
+ *
+ * Four faces, and no more: the handoff uses Archivo 400 for body text, 500 and
+ * 600 for section labels and controls, 700 for the wordmark (that last one
+ * lives in `fonts-broadcast.css`), and IBM Plex Mono 400 for URLs, numbers and
+ * the journal. A weight nobody asks for still costs 14 KB.
+ *
+ * No italic anywhere in the mockup, so no italic face is shipped. A browser
+ * asked to slant one of these will synthesise it, which is the right failure:
+ * visible if it ever happens, free until then.
+ */
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../assets/fonts/archivo-latin-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('../assets/fonts/archivo-latin-500-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../assets/fonts/archivo-latin-600-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../assets/fonts/ibm-plex-mono-latin-400-normal.woff2') format('woff2');
+}

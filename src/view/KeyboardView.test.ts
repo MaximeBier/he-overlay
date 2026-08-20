@@ -80,7 +80,7 @@ describe('KeyboardView', () => {
     const deepLabel = deep.container.querySelector('text')!;
 
     expect(deepLabel.getAttribute('fill')).toBe(OVERLAY_TOKENS.keyLabel);
-    expect(deepLabel.getAttribute('stroke')).toBe(OVERLAY_TOKENS.keyLabelInverted);
+    expect(deepLabel.getAttribute('stroke')).toBe(OVERLAY_TOKENS.keyLabelOutline);
     expect(deepLabel.getAttribute('paint-order')).toBe('stroke fill');
   });
 });

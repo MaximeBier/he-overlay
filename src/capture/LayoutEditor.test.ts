@@ -2,9 +2,15 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, cleanup } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import LayoutEditor from './LayoutEditor.svelte';
-import { defaultConfig, type OverlayConfig } from '../config/schema';
+import { DEFAULT_STYLE, defaultConfig, type OverlayConfig } from '../config/schema';
 
 afterEach(cleanup);
+
+// Two whole key widths, read from the default rather than written as a pixel
+// count: the mockup moved the tile from 56 px to 72 px on 2026-08-20, and a
+// literal here silently became "1.55 units", which the quarter-key grid then
+// snapped to 1.5.
+const TWO_KEYS_ACROSS = 2 * DEFAULT_STYLE.unit;
 
 function twoKeys(): OverlayConfig {
   const config = defaultConfig();
@@ -99,7 +105,7 @@ describe('LayoutEditor - a drag that never ends', () => {
     const before = handles[0]!.style.left;
 
     press(handles[0]!);
-    move(stage, { clientX: 112, clientY: 0 });
+    move(stage, { clientX: TWO_KEYS_ACROSS, clientY: 0 });
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     await tick();
 
@@ -130,7 +136,7 @@ describe('LayoutEditor - writing only what changed', () => {
     const stage = container.querySelector('.stage')!;
 
     press(handles[0]!);
-    move(stage, { clientX: 112, clientY: 0 });
+    move(stage, { clientX: TWO_KEYS_ACROSS, clientY: 0 });
     window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1 }));
 
     expect(onChange).toHaveBeenCalledTimes(1);
