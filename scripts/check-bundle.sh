@@ -45,6 +45,10 @@ absent 'he-overlay:config' 'the configuration storage'
 absent 'IntlBackslash' 'the ISO geometry table'
 absent 'ContextMenu' 'the ISO geometry table entries'
 absent 'getLayoutMap' 'the layout detection'
+# The diagnostics panel is the largest capture-only thing there is, and the
+# easiest to drag over by importing one helper from the wrong module.
+absent 'undocumented low bits' 'the journal wording'
+absent 'Capture raw report' 'the diagnostics panel'
 
 # Stylesheets, checked the same way and for the same reason. Fonts are the one
 # resource where a leak is measured in tens of kilobytes rather than bytes, and

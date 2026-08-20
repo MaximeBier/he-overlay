@@ -5,8 +5,19 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { svelteTesting } from '@testing-library/svelte/vite';
 import { resolve } from 'node:path';
 
+/**
+ * What the diagnostics panel calls itself (spec §11).
+ *
+ * A bug report that cannot name its build is a report about an unknown
+ * program. `package.json` cannot answer: it stays at 0.0.0 and the real
+ * version is the git tag, which only CI knows. The image passes it in as a
+ * build argument; a local build says `dev`, truthfully.
+ */
+const BUILD = process.env.VITE_BUILD ?? 'dev';
+
 export default defineConfig({
   plugins: [svelte(), svelteTesting()],
+  define: { __BUILD__: JSON.stringify(BUILD) },
   build: {
     rollupOptions: {
       // Two application entries, compiled separately: the editor code never

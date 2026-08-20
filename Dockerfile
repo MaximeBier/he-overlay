@@ -3,6 +3,12 @@ FROM node:22-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
+
+# After `npm ci` on purpose: this value changes on every release, and placing
+# it earlier would reinstall the dependencies for each one.
+ARG VITE_BUILD=dev
+ENV VITE_BUILD=$VITE_BUILD
+
 COPY . .
 RUN npm run build
 

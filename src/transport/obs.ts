@@ -1,5 +1,5 @@
 import { computeAuth } from './auth';
-import { envelope, parseMessage, type OverlayMessage } from '../protocol/messages';
+import { foreignVersion, envelope, parseMessage, type OverlayMessage } from '../protocol/messages';
 
 /**
  * `unreachable` and `disconnected` are both failures, and deliberately not the
@@ -53,6 +53,11 @@ export interface ObsClientOptions {
   password: string;
   onStatus(status: ObsStatus): void;
   onMessage(message: OverlayMessage): void;
+  /**
+   * An overlay on a protocol version we cannot read — almost always one
+   * left open across a deployment. Diagnosis only; nothing is processed.
+   */
+  onForeignVersion?(version: number): void;
   socketFactory?(url: string): SocketLike;
 }
 
@@ -188,7 +193,15 @@ export function createObsClient(options: ObsClientOptions): ObsClient {
     }
     if (payload.op === 5 && payload.d?.eventType === 'CustomEvent') {
       const message = parseMessage(payload.d.eventData);
-      if (message) options.onMessage(message);
+      if (message) {
+        options.onMessage(message);
+        return;
+      }
+      // Unreadable, and worth saying so. `foreignVersion` answers only for
+      // our own envelope, so another application on the same bus stays
+      // silent rather than sending someone to reload a page of theirs.
+      const version = foreignVersion(payload.d.eventData);
+      if (version !== null) options.onForeignVersion?.(version);
     }
   }
 

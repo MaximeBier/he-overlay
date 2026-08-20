@@ -71,6 +71,11 @@ jobs:
           platforms: linux/amd64
           load: true
           tags: he-overlay:ci
+          # Stamped into the bundle so the diagnostics panel can name its own
+          # build (spec §11). A report that cannot say which version produced
+          # it is a report about an unknown program.
+          build-args: |
+            VITE_BUILD=${{ steps.meta.outputs.version }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

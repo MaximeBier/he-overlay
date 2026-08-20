@@ -388,3 +388,65 @@ describe('createObsClient — telling the two failures apart', () => {
     expect(client.status).toBe('unreachable');
   });
 });
+
+describe('an overlay speaking a protocol we cannot read', () => {
+  function setupWithVersions(password = '') {
+    const sockets: FakeSocket[] = [];
+    const versions: number[] = [];
+    const messages: OverlayMessage[] = [];
+
+    const client = createObsClient({
+      url: 'ws://localhost:4455',
+      password,
+      onStatus: () => {},
+      onMessage: (m) => messages.push(m),
+      onForeignVersion: (v) => versions.push(v),
+      socketFactory: () => {
+        const socket = new FakeSocket();
+        sockets.push(socket);
+        return socket;
+      },
+    });
+
+    const socket = () => sockets[sockets.length - 1]!;
+    client.connect();
+    socket().receive(HELLO_NO_AUTH);
+    socket().receive({ op: 2, d: { negotiatedRpcVersion: 1 } });
+    return { client, socket, versions, messages };
+  }
+
+  const event = (eventData: unknown) => ({
+    op: 5,
+    d: { eventType: 'CustomEvent', eventData },
+  });
+
+  it('names the version instead of going quiet', () => {
+    // Ignoring it is right for the pipeline and useless for the person
+    // wondering why their overlay went blank after a deploy (spec §11).
+    const { socket, versions, messages } = setupWithVersions();
+
+    socket().receive(event({ heOverlay: { v: 7, t: 'hello', id: 'a' } }));
+
+    expect(versions).toEqual([7]);
+    expect(messages).toEqual([]);
+  });
+
+  it('stays quiet about a message it could read', () => {
+    const { socket, versions, messages } = setupWithVersions();
+
+    socket().receive(event({ heOverlay: { v: 1, t: 'hello', id: 'a' } }));
+
+    expect(versions).toEqual([]);
+    expect(messages).toHaveLength(1);
+  });
+
+  it('stays quiet about another application on the same bus', () => {
+    // OBS carries everyone's custom events. Reporting one of those would send
+    // someone reloading a page that was never ours.
+    const { socket, versions } = setupWithVersions();
+
+    socket().receive(event({ someOtherApp: { v: 3 } }));
+
+    expect(versions).toEqual([]);
+  });
+});

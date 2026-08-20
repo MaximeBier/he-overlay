@@ -25,6 +25,9 @@
   import type { OverlayConfig } from '../config/schema';
   import StatusBar from './StatusBar.svelte';
   import Wizard from './Wizard.svelte';
+  import Diagnostics from './Diagnostics.svelte';
+  import { createJournal, describeAnomaly, hexDump, type JournalEntry } from './journal';
+  import { createStreamProbe, type StreamReading } from './probe';
   import {
     loadStatus,
     nextStep,
@@ -127,6 +130,56 @@
   let rate = $state(0);
   let overlayCount = $state(0);
 
+  /**
+   * Everything worth writing down, for the report nobody can write blind
+   * (spec §11). Mirrored into state because the journal is plain data: it is
+   * appended to from four event handlers and read by one panel.
+   */
+  const journal = createJournal();
+  let log = $state<readonly JournalEntry[]>([]);
+  let logOpen = $state(false);
+
+  function note(kind: 'user' | 'bug', message: string) {
+    journal.add(kind, message, performance.now());
+    log = journal.entries();
+  }
+
+  /**
+   * The live reading, computed only while someone is looking.
+   *
+   * It follows `frame`, which arrives up to sixty times a second. A shut
+   * panel that kept recomputing would make the capture page compete with its
+   * own broadcast, for a list nobody can see.
+   */
+  const readings = $derived.by(() => {
+    if (!logOpen) return [];
+    return config.keys.map((key) => {
+      const seen = frame.find(([id]) => id === key.id);
+      return { id: key.id, label: key.label, travel: seen?.[1] ?? 0, active: seen?.[2] === 1 };
+    });
+  });
+
+  let capturing = $state(false);
+  let snapshot = $state<string | null>(null);
+
+  /**
+   * A probe on the report stream, never on a clock (global constraint 1).
+   * Its reading is refreshed on emitted frames rather than on reports: reports
+   * arrive at up to a thousand a second, and re-rendering at that rate is the
+   * stutter this page exists to avoid.
+   */
+  const streamProbe = createStreamProbe();
+  let probing = $state(false);
+  let probeReading = $state<StreamReading | null>(null);
+
+  function toggleProbe() {
+    if (streamProbe.running) streamProbe.stop(performance.now());
+    else streamProbe.start(performance.now());
+    probing = streamProbe.running;
+    probeReading = streamProbe.reading();
+    note('user', probing ? 'Background probe started.' : 'Background probe stopped.');
+  }
+
   const overlays = createOverlayRegistry();
 
   let setup = $state<WizardStatus>(loadStatus(storage));
@@ -172,6 +225,7 @@
       password: untrack(() => settings.password),
       onStatus: (s) => {
         obsStatus = s;
+        note('user', `OBS: ${s}.`);
         // Nothing left while the socket was down, and an overlay on the other
         // side may have been waiting the whole time.
         if (s === 'identified') broadcaster.onIdentified();
@@ -186,6 +240,12 @@
           // frame is leaving, and zero is simply the truth.
           rate = 0;
         }
+      },
+      onForeignVersion: (version) => {
+        // Almost always an overlay left open across a deployment. It goes
+        // quiet with nothing to say why, which is the whole reason this line
+        // exists (spec §11).
+        note('user', `An overlay is running protocol v${version}; reload it.`);
       },
       onMessage: (message) => {
         // Presence and configuration are both driven by these three messages,
@@ -345,7 +405,7 @@
   function warnOnce(anomaly: DecodeAnomaly) {
     if (warned.has(anomaly.kind)) return;
     warned.add(anomaly.kind);
-    console.warn('decode anomaly', anomaly);
+    note('bug', describeAnomaly(anomaly));
   }
 
   const session = createCaptureSession({
@@ -377,6 +437,10 @@
     onKeys: (k) => {
       frame = k;
       rate = session.rate;
+      // Refreshed here, not in the report handler: this runs at the emission
+      // rate, which is bounded, and nothing about the figures needs to be
+      // fresher than what the eye can read.
+      if (probing) probeReading = streamProbe.reading();
       // Expiry is computed on read, so an overlay that went away only stops
       // being counted once something asks. Without this it would linger until
       // another overlay beats — and if it was the only one, forever.
@@ -387,10 +451,22 @@
 
   const link = createKeyboardLink({
     hid: navigator.hid,
-    onReport: (data, timestamp) => session.handleReport(data, timestamp),
+    onReport: (data, timestamp) => {
+      // The only place the raw bytes exist. Latched once: an unknown keyboard
+      // is identified from one report, and rewriting it a thousand times a
+      // second would leave nothing readable on screen.
+      if (capturing) {
+        snapshot = hexDump(data);
+        capturing = false;
+        note('user', 'Raw report captured.');
+      }
+      streamProbe.observe(timestamp);
+      session.handleReport(data, timestamp);
+    },
     onStatus: (status, name) => {
       keyboardStatus = status;
       keyboardName = name;
+      note('user', name === null ? `Keyboard: ${status}.` : `Keyboard: ${status} (${name}).`);
     },
   });
 
@@ -547,6 +623,21 @@
     {/if}
   {/if}
 </main>
+
+<!-- Last, and shut: the rarest thing on the page. Task 27 moves it to the foot
+     of the sidebar, where the mockup puts it. -->
+<Diagnostics
+  bind:open={logOpen}
+  entries={log}
+  logText={journal.asText()}
+  {readings}
+  {snapshot}
+  {capturing}
+  {probing}
+  probe={probeReading}
+  onCaptureRaw={() => (capturing = true)}
+  onToggleProbe={toggleProbe}
+/>
 
 <style>
   main {
