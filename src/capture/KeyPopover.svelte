@@ -102,11 +102,17 @@
       {/each}
     </div>
 
-    {#if suggestAxis}
+    {#if suggestAxis && mode === 'key'}
       <!-- Worded as the observation, not as a conclusion: the keyboard says
            this key travelled its whole depth and never fired. It does not say
            the key is bound to a stick, and nothing here can find out. Never a
-           switch, always an offer (spec §7.4). -->
+           switch, always an offer (spec §7.4).
+
+           Gated on the mode here rather than on the suggester's side, so the
+           panel cannot contradict the toggle sitting above it. "This key never
+           fires" stays true after the advice is taken — the suggester has no
+           reason to withdraw it, and would go on offering a switch that has
+           already happened. -->
       <p class="suggestion" data-suggestion>
         This key does not send a keystroke.
         <span class="actions">
@@ -195,7 +201,7 @@
             data-reset="label"
             onclick={() => onChange(setKeyLabel(config, single.id, detectedLabel))}
           >
-            Reset to detected · {detectedLabel}
+            Reset to detected · <code>{detectedLabel}</code>
           </button>
         </div>
       {/if}
@@ -367,6 +373,19 @@
   .actions {
     display: flex;
     gap: 12px;
+  }
+  /* The label is a value, not prose, and it reads as prose without this: the
+     button said "Reset to detected · A" and the A disappeared into the
+     sentence. Same mono face as the field it puts the value back into, one
+     row above, so the two are visibly the same kind of thing. */
+  [data-reset='label'] code {
+    font: var(--he-font-mono, 400 12px ui-monospace, monospace);
+    color: var(--he-text, #dde1e9);
+    background: var(--he-stage, #0b0d11);
+    border: 1px solid var(--he-border-control, #232838);
+    border-radius: 3px;
+    padding: 1px 5px;
+    margin-inline-start: 2px;
   }
   .row.end {
     justify-content: flex-end;

@@ -215,6 +215,18 @@ describe('KeyPopover - the axis suggestion', () => {
     expect(onDismissSuggestion).toHaveBeenCalled();
     expect(onChange).not.toHaveBeenCalled();
   });
+  it('says nothing to a key that is already an axis', () => {
+    // Seen on air: a key switched to axis still offered "Show as axis", right
+    // under a toggle already reading Axis. The suggester answers "this key
+    // never fires", which stays true forever — it is the popover's job to
+    // notice the advice has been taken.
+    const axis = twoKeys();
+    axis.keys[0]!.mode = 'axis';
+
+    const { container } = suggested(axis);
+
+    expect(container.querySelector('[data-suggestion]')).toBeNull();
+  });
 });
 
 describe('KeyPopover - going back to the detected label', () => {

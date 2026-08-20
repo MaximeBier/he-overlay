@@ -51,19 +51,31 @@
   const size = $derived(recommendedSize(resolve(config)));
 
   const suggester = createAxisSuggester();
+
+  /**
+   * Bumped when the suggester learns something, and read by the list below.
+   *
+   * Its three sets are plain data, so nothing about them is reactive. Polling
+   * them on every report is not an option either: reports arrive at up to a
+   * thousand a second and the answer changes perhaps twice a session.
+   */
+  let observed = $state(0);
+
   /**
    * The configured keys the suggester currently speaks for.
    *
-   * A snapshot, refreshed only when the suggester says it learned something.
-   * Reports arrive at up to a thousand a second, and asking it on every one of
-   * them would rebuild this list at report rate for an answer that changes
-   * perhaps twice a session.
+   * Derived, never cached — and that is the fix for a real defect. The first
+   * version kept a snapshot refreshed only when the suggester learned
+   * something, which lost exactly the keys that matter: adding a key means
+   * pressing it, so it reaches full travel *before* it exists in
+   * `config.keys`. The refresh then filtered a list without it, and every
+   * later press taught the suggester nothing new — so it never spoke again.
+   * Reading `config` here means the list also follows a key being added.
    */
-  let suggestedIds = $state<number[]>([]);
-
-  function refreshSuggestions() {
-    suggestedIds = config.keys.map((key) => key.id).filter((id) => suggester.suggests(id));
-  }
+  const suggestedIds = $derived.by(() => {
+    void observed;
+    return config.keys.map((key) => key.id).filter((id) => suggester.suggests(id));
+  });
 
   let rate = $state(0);
   let overlayCount = $state(0);
@@ -257,7 +269,7 @@
     onEntries: (entries) => {
       // Before the learning guard: a key is watched from the moment it is
       // seen, not from the moment someone happens to be adding one.
-      if (suggester.observe(entries)) refreshSuggestions();
+      if (suggester.observe(entries)) observed += 1;
       if (!learning) return;
       const learned = pickLearned(entries);
       if (!learned) return;
@@ -351,7 +363,7 @@
       // Proposing a mode for a heterogeneous group would mean nothing, so the
       // suggestion is single-selection only — and so is dismissing it.
       suggester.dismiss(selectedIds[0]!);
-      refreshSuggestions();
+      observed += 1;
     }}
   />
 
