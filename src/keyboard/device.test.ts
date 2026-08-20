@@ -2,6 +2,44 @@ import { describe, it, expect, vi } from 'vitest';
 import { createKeyboardLink, isAnalogDevice, type KeyboardStatus } from './device';
 import { fakeDevice, fakeHid } from '../test/fixtures';
 
+describe('naming the keyboard that answered', () => {
+  const ANALOG = 0xff53;
+
+  it('hands the product name over with the connection', async () => {
+    // The wizard confirms step 1 by naming the device (mockup 6b). Without it
+    // the only proof of a keyboard is a green dot, which says nothing about
+    // *which* one — and a machine with two analog boards is exactly where the
+    // question gets asked.
+    const seen: [KeyboardStatus, string | null][] = [];
+    const device = fakeDevice([ANALOG], 'Wooting 60HE');
+    const link = createKeyboardLink({
+      hid: fakeHid([device]),
+      onReport: () => {},
+      onStatus: (status, name) => void seen.push([status, name]),
+    });
+
+    await link.resume();
+
+    expect(seen).toContainEqual(['connected', 'Wooting 60HE']);
+  });
+
+  it('names nobody once the keyboard is gone', async () => {
+    const seen: [KeyboardStatus, string | null][] = [];
+    const device = fakeDevice([ANALOG]);
+    const hid = fakeHid([device]);
+    const link = createKeyboardLink({
+      hid,
+      onReport: () => {},
+      onStatus: (status, name) => void seen.push([status, name]),
+    });
+
+    await link.resume();
+    hid.fire('disconnect', device);
+
+    expect(seen.at(-1)).toEqual(['disconnected', null]);
+  });
+});
+
 describe('isAnalogDevice', () => {
   it('accepts a 0xFF53 collection', () => {
     expect(isAnalogDevice(fakeDevice([0xff53]))).toBe(true);

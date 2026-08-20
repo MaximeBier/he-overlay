@@ -30,7 +30,8 @@ export interface HidLike {
 export interface KeyboardLinkOptions {
   hid: HidLike | undefined;
   onReport(data: Uint8Array, timestamp: number): void;
-  onStatus(status: KeyboardStatus): void;
+  /** The product name comes with the status: the two only ever change together. */
+  onStatus(status: KeyboardStatus, device: string | null): void;
 }
 
 export interface KeyboardLink {
@@ -60,7 +61,7 @@ export function createKeyboardLink(options: KeyboardLinkOptions): KeyboardLink {
   function setStatus(next: KeyboardStatus) {
     if (status === next) return;
     status = next;
-    options.onStatus(next);
+    options.onStatus(next, current?.productName ?? null);
   }
 
   /**

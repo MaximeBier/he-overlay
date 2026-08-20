@@ -24,6 +24,16 @@
   import { createProfileStore, exportConfig, importConfig } from '../config/storage';
   import type { OverlayConfig } from '../config/schema';
   import StatusBar from './StatusBar.svelte';
+  import Wizard from './Wizard.svelte';
+  import {
+    loadStatus,
+    nextStep,
+    saveStatus,
+    showsResume,
+    showsWizard,
+    stepNumber,
+    type WizardStatus,
+  } from './wizard';
   import ProfileBar from './ProfileBar.svelte';
   import Toast from './Toast.svelte';
   import {
@@ -41,6 +51,8 @@
 
   let settings = $state(loadSettings(storage));
   let keyboardStatus = $state<KeyboardStatus>('disconnected');
+  /** The product name of the keyboard that answered, for the wizard's first step. */
+  let keyboardName = $state<string | null>(null);
   let obsStatus = $state<ObsStatus>('idle');
   let frame = $state<readonly FrameKey[]>([]);
 
@@ -70,6 +82,9 @@
   let toast = $state<Notice | null>(loadToast(opened.problem));
 
   let learning = $state(false);
+  /** The label of the last key learned, which the wizard's third step confirms. */
+  let lastKey = $state<string | null>(null);
+
   let selectedIds = $state<number[]>([]);
   let layout = $state<LayoutMapLike | null>(null);
   void loadLayoutMap(navigator).then((map) => (layout = map));
@@ -113,6 +128,32 @@
   let overlayCount = $state(0);
 
   const overlays = createOverlayRegistry();
+
+  let setup = $state<WizardStatus>(loadStatus(storage));
+  const step = $derived(
+    nextStep({
+      keyboard: keyboardStatus,
+      obs: obsStatus,
+      overlays: overlayCount,
+      keyCount: config.keys.length,
+    }),
+  );
+  const wizardOpen = $derived(showsWizard(setup, step));
+  const canResume = $derived(showsResume(setup, step));
+
+  /**
+   * Written the first time everything works, whether the wizard was followed
+   * or skipped. Without it, an OBS restart the next evening reopens a setup
+   * that was finished weeks ago — `nextStep` reads the world, not history.
+   */
+  $effect(() => {
+    if (step === 'done' && setup !== 'done') remember('done');
+  });
+
+  function remember(status: WizardStatus) {
+    setup = status;
+    saveStatus(storage, status);
+  }
 
   /** A synchronous reading, not a timer: allowed on the capture page. */
   function refreshOverlays() {
@@ -326,7 +367,12 @@
       // One key per activation: the mode closes itself, so holding the key
       // down cannot add it a second time.
       learning = false;
-      updateConfig(addLearnedKey(config, learned, activeLayout));
+      const next = addLearnedKey(config, learned, activeLayout);
+      // Read from the result, not from the report: the label is the layout's
+      // business, and the wizard's third step names the key it just saw.
+      const before = config.keys.map((key) => key.id);
+      lastKey = next.keys.find((key) => !before.includes(key.id))?.label ?? null;
+      updateConfig(next);
     },
     onKeys: (k) => {
       frame = k;
@@ -342,7 +388,10 @@
   const link = createKeyboardLink({
     hid: navigator.hid,
     onReport: (data, timestamp) => session.handleReport(data, timestamp),
-    onStatus: (s) => (keyboardStatus = s),
+    onStatus: (status, name) => {
+      keyboardStatus = status;
+      keyboardName = name;
+    },
   });
 
   // Nothing to do on switching the machine on (spec §10): a keyboard already
@@ -354,6 +403,13 @@
 
 <div class="top">
   <StatusBar keyboard={keyboardStatus} obs={obsStatus} {rate} overlays={overlayCount} />
+  {#if canResume}
+    <button class="resume" onclick={() => remember('open')}>
+      <span class="dot" aria-hidden="true"></span>
+      Resume setup · {stepNumber(step)}/3
+    </button>
+  {/if}
+
   <ProfileBar
     names={profileNames}
     active={profile}
@@ -374,6 +430,21 @@
 
 <main>
   <h1>HE Overlay — Capture</h1>
+
+  {#if wizardOpen}
+    <Wizard
+      {step}
+      keyboard={keyboardStatus}
+      device={keyboardName}
+      {settings}
+      {url}
+      bind:learning
+      added={lastKey}
+      onAllowKeyboard={() => link.requestPermission()}
+      onReconnect={reconnect}
+      onSkip={() => remember('skipped')}
+    />
+  {/if}
 
   <button onclick={() => link.requestPermission()}>Allow keyboard</button>
 
@@ -504,6 +575,28 @@
   }
   .top :global(header) {
     flex: 1;
+  }
+  /* Amber, and in the header: it has to be findable long after the card was
+     put aside, from any screen (board 6f). */
+  .resume {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--he-override, #d9a05b);
+    background: none;
+    border: 1px solid var(--he-override, #d9a05b);
+    border-radius: var(--he-radius-control, 5px);
+    padding: 5px 11px;
+    cursor: pointer;
+  }
+  .resume .dot {
+    inline-size: 6px;
+    block-size: 6px;
+    border-radius: 50%;
+    background: var(--he-override, #d9a05b);
   }
   .keys {
     list-style: none;
