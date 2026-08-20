@@ -15,6 +15,14 @@ export const UI_TOKENS = {
   borderPopover: '#262B3A',
   /** Also the disabled dot. The mockup gives one value both jobs. */
   borderHover: '#3A4054',
+  /**
+   * Toast borders, one per tone (spec §16.6). Deeper than the dot they sit
+   * beside — a toast reads as a message, not as an alert box, and a border in
+   * the dot's own colour is the difference.
+   */
+  borderOk: '#2E5D42',
+  borderWarn: '#4A3820',
+  borderDanger: '#3A2226',
   accent: '#7C9EFF',
   accentHover: '#a5bcff',
   override: '#D9A05B',

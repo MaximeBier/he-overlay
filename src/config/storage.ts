@@ -110,7 +110,8 @@ export interface ProfileStore {
   create(name: string): string;
   duplicate(from: string): string;
   remove(name: string): void;
-  rename(from: string, to: string): void;
+  /** False when the name was empty or already belonged to another profile. */
+  rename(from: string, to: string): boolean;
 }
 
 function freeName(taken: readonly string[], wanted: string): string {
@@ -226,9 +227,13 @@ export function createProfileStore(storage: ProfileStorage): ProfileStore {
     rename(from, to) {
       const list = names();
       const target = to.trim();
+      if (!target || !list.includes(from)) return false;
+      // Nothing to do, and not a failure: an unchanged field is not an error,
+      // and reporting one would answer someone who changed nothing.
+      if (target === from) return true;
       // A rename onto a name already taken is a merge nobody asked for: the
       // other profile would disappear under this one.
-      if (!target || target === from || !list.includes(from) || list.includes(target)) return;
+      if (list.includes(target)) return false;
 
       const wasActive = activeName() === from;
       const raw = storage.getItem(profileKey(from));
@@ -237,6 +242,7 @@ export function createProfileStore(storage: ProfileStorage): ProfileStore {
       if (raw !== null) write(storage, profileKey(target), raw);
       storage.removeItem(profileKey(from));
       if (wasActive) write(storage, ACTIVE_KEY, target);
+      return true;
     },
   };
 }

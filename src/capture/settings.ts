@@ -51,7 +51,7 @@ export function saveSettings(
  * and the capture page does not mount at all: a blank screen for a setting the
  * user may not even know they have. Credentials simply stop surviving a reload.
  */
-export function browserStorage(): Pick<Storage, 'getItem' | 'setItem'> {
+export function browserStorage(): Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> {
   try {
     const storage = globalThis.localStorage;
     storage.getItem(KEY);
@@ -61,6 +61,7 @@ export function browserStorage(): Pick<Storage, 'getItem' | 'setItem'> {
     return {
       getItem: (key) => memory.get(key) ?? null,
       setItem: (key, value) => void memory.set(key, value),
+      removeItem: (key) => void memory.delete(key),
     };
   }
 }

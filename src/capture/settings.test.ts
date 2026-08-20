@@ -71,6 +71,29 @@ describe('credential persistence', () => {
     }
   });
 
+  it('can delete, even on the fallback: profiles remove their own keys', () => {
+    // The profile store is the first caller that deletes. A fallback without
+    // `removeItem` throws on the first profile anyone removes — in a browser
+    // that already refuses storage, so nowhere near a development machine.
+    const original = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      get() {
+        throw new DOMException('SecurityError');
+      },
+    });
+
+    try {
+      const storage = browserStorage();
+      storage.setItem('he-overlay:profile:Apex', '{}');
+      storage.removeItem('he-overlay:profile:Apex');
+
+      expect(storage.getItem('he-overlay:profile:Apex')).toBeNull();
+    } finally {
+      if (original) Object.defineProperty(globalThis, 'localStorage', original);
+    }
+  });
+
   it('refuses a port no URL could carry', () => {
     const stored = JSON.stringify({ port: 99999, password: 'hunter2' });
 

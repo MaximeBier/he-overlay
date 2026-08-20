@@ -21,9 +21,19 @@
   import KeyLearner from './KeyLearner.svelte';
   import LayoutEditor from './LayoutEditor.svelte';
   import StylePanel from './StylePanel.svelte';
-  import { loadConfig, saveConfig, exportConfig, importConfig } from '../config/storage';
+  import { createProfileStore, exportConfig, importConfig } from '../config/storage';
   import type { OverlayConfig } from '../config/schema';
   import StatusBar from './StatusBar.svelte';
+  import ProfileBar from './ProfileBar.svelte';
+  import Toast from './Toast.svelte';
+  import {
+    importToast,
+    loadToast,
+    profileStatus,
+    READ_FAILED,
+    type Health,
+    type Notice,
+  } from './notice';
   import type { DecodeAnomaly } from '../keyboard/decode';
   import type { FrameKey } from '../protocol/messages';
 
@@ -33,10 +43,32 @@
   let keyboardStatus = $state<KeyboardStatus>('disconnected');
   let obsStatus = $state<ObsStatus>('idle');
   let frame = $state<readonly FrameKey[]>([]);
-  const stored = loadConfig(storage);
-  let config = $state(stored.config);
-  /** What to say about the configuration: a load problem, or an import result. */
-  let notice = $state(loadNotice(stored.problem, stored.dropped));
+
+  const profiles = createProfileStore(storage);
+  // Read once, before the rune: this is the startup value, not a subscription.
+  const openedName = profiles.active();
+  let profile = $state(openedName);
+  let profileNames = $state(profiles.list());
+
+  const opened = profiles.load(openedName);
+  let config = $state(opened.config);
+
+  /**
+   * What the open profile is worth, kept past the toast that announced it.
+   *
+   * The two are not redundant (spec §16.6): the toast says something just
+   * happened, this says what we are looking at — hours later, when the only
+   * question left is why there are four keys instead of six.
+   */
+  let health = $state<Health>({
+    problem: opened.problem,
+    dropped: opened.dropped,
+    from: 'load',
+  });
+
+  /** The passing half. Replaced, never queued: the last thing said is the one that matters. */
+  let toast = $state<Notice | null>(loadToast(opened.problem));
+
   let learning = $state(false);
   let selectedIds = $state<number[]>([]);
   let layout = $state<LayoutMapLike | null>(null);
@@ -156,91 +188,109 @@
    */
   function updateConfig(next: OverlayConfig) {
     config = next;
-    saveConfig(storage, config);
+    profiles.save(profile, config);
     broadcaster.publish(config);
   }
 
-  function droppedKeys(dropped: number): string {
-    const plural = dropped === 1 ? ['key', 'was'] : ['keys', 'were'];
-    return `${dropped} ${plural[0]} could not be read and ${plural[1]} left out.`;
-  }
+  /** What the profile menu shows permanently, under the list (spec §16.6). */
+  const status = $derived(profileStatus(profile, config.keys.length, health));
+  const statusWarn = $derived(health.problem !== null || health.dropped > 0);
 
   /**
-   * What to say about the configuration found in storage at startup.
+   * Opens a profile, and puts the overlay on it.
    *
-   * Kept apart from the import wording on purpose. The two failures look alike
-   * and mean opposite things: here the saved profile really was unusable, on
-   * an import nothing was lost at all. Sharing one sentence told people they
-   * had just lost their layout when they had not.
+   * The broadcast is not optional: OBS is showing the previous profile's keys
+   * and nothing about switching would reach it otherwise.
    */
-  function loadNotice(problem: 'unreadable' | 'too-new' | null, dropped: number): string | null {
-    if (problem === 'unreadable') {
-      return (
-        'Your saved configuration could not be read, so this starts from the defaults. ' +
-        'The unreadable copy has been kept aside.'
-      );
+  function openProfile(name: string) {
+    profiles.select(name);
+    profile = name;
+    profileNames = profiles.list();
+
+    const next = profiles.load(name);
+    health = { problem: next.problem, dropped: next.dropped, from: 'load' };
+    config = next.config;
+    broadcaster.publish(config);
+
+    return loadToast(next.problem);
+  }
+
+  function switchProfile(name: string) {
+    toast = openProfile(name);
+  }
+
+  function createProfile(name: string) {
+    // `create` returns the name it really took: asking for one that exists
+    // gets "Apex 2" rather than the layout that was already there.
+    const created = profiles.create(name);
+    openProfile(created);
+    toast = { tone: 'success', message: `Profile “${created}” created` };
+  }
+
+  function duplicateProfile() {
+    // Saved first: `duplicate` copies what is in storage, and the difference
+    // would be exactly whatever has not been written yet.
+    profiles.save(profile, config);
+    const copy = profiles.duplicate(profile);
+    openProfile(copy);
+    toast = { tone: 'success', message: `Duplicated to “${copy}”` };
+  }
+
+  function renameProfile(name: string) {
+    // Nothing is loaded or broadcast: the configuration did not change, only
+    // the name it is filed under. Reopening it here would push an identical
+    // profile back at OBS for no reason.
+    if (!profiles.rename(profile, name)) {
+      toast = { tone: 'error', message: `A profile named “${name}” already exists` };
+      return;
     }
-    if (problem === 'too-new') {
-      return (
-        'Your saved configuration was written by a newer version of HE Overlay. This starts ' +
-        'from the defaults rather than guessing at it; your profile has been kept aside, ' +
-        'not overwritten.'
-      );
-    }
-    return dropped > 0 ? droppedKeys(dropped) : null;
+
+    profile = name;
+    profileNames = profiles.list();
+    toast = { tone: 'success', message: `Renamed to “${name}”` };
+  }
+
+  function removeProfile() {
+    const gone = profile;
+    profiles.remove(gone);
+    openProfile(profiles.active());
+    toast = { tone: 'success', message: `Profile “${gone}” deleted` };
   }
 
   function downloadProfile() {
     const blob = new Blob([exportConfig(config)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
+    const href = URL.createObjectURL(blob);
     const link = Object.assign(document.createElement('a'), {
-      href: url,
-      download: 'he-overlay.json',
+      href,
+      // A profile name is free text and lands in a file name: anything a path
+      // could read as a separator becomes a dash.
+      download: `he-overlay-${profile.replace(/[^\w.-]+/g, '-')}.json`,
     });
     link.click();
-    URL.revokeObjectURL(url);
+    URL.revokeObjectURL(href);
   }
 
-  async function uploadProfile(event: Event & { currentTarget: HTMLInputElement }) {
-    // Held before the await: the DOM clears `currentTarget` once the dispatch
-    // ends, so reading it afterwards throws.
-    const input = event.currentTarget;
-    const file = input.files?.[0];
-    if (!file) return;
-
+  async function importProfile(file: File) {
     let text: string;
     try {
       // `File.text()` rejects when the file moved, changed, or sat on a volume
       // that went away between the picker closing and the read. Unhandled, the
-      // rejection belongs to nobody: no message, and the input never cleared,
-      // so the second attempt on the same file does nothing at all.
+      // rejection belongs to nobody: no message, and nothing to retry against.
       text = await file.text();
     } catch {
-      notice = 'That file could not be read. Your configuration is unchanged.';
-      input.value = '';
+      toast = READ_FAILED;
       return;
     }
-
-    // Cleared either way, or picking the same file twice in a row fires
-    // nothing — which is exactly what someone does after fixing it by hand.
-    input.value = '';
 
     const result = importConfig(text);
-    if (!result.ok) {
-      // Never the startup wording: nothing was lost here. The saved profile is
-      // intact and the current one untouched.
-      notice =
-        result.reason === 'too-new'
-          ? 'That profile was written by a newer version of HE Overlay. Nothing was ' +
-            'imported, and your configuration is unchanged.'
-          : 'That file is not a HE Overlay profile. Nothing was imported, and your ' +
-            'configuration is unchanged.';
-      return;
-    }
+    toast = importToast(result);
+    // Nothing is lost on a failure: the open profile is untouched, and the
+    // toast is the only thing that changes. The permanent line still describes
+    // what is actually loaded.
+    if (!result.ok) return;
 
+    health = { problem: null, dropped: result.dropped, from: 'import' };
     updateConfig(result.config);
-    notice =
-      result.dropped > 0 ? `Profile imported. ${droppedKeys(result.dropped)}` : 'Profile imported.';
   }
 
   /**
@@ -302,7 +352,25 @@
   obs.connect();
 </script>
 
-<StatusBar keyboard={keyboardStatus} obs={obsStatus} {rate} overlays={overlayCount} />
+<div class="top">
+  <StatusBar keyboard={keyboardStatus} obs={obsStatus} {rate} overlays={overlayCount} />
+  <ProfileBar
+    names={profileNames}
+    active={profile}
+    keyCount={(name) => profiles.keyCount(name)}
+    {status}
+    {statusWarn}
+    onSelect={switchProfile}
+    onCreate={createProfile}
+    onDuplicate={duplicateProfile}
+    onRename={renameProfile}
+    onRemove={removeProfile}
+    onExport={downloadProfile}
+    onImport={importProfile}
+  />
+</div>
+
+<Toast notice={toast} onDismiss={() => (toast = null)} />
 
 <main>
   <h1>HE Overlay — Capture</h1>
@@ -334,19 +402,7 @@
     </p>
   {/if}
 
-  <div class="profile">
-    <button onclick={downloadProfile}>Export profile</button>
-    <label>
-      Import profile
-      <input type="file" accept="application/json" onchange={uploadProfile} />
-    </label>
-  </div>
-
-  {#if notice}
-    <p class="notice" role="status">{notice}</p>
-  {/if}
-
-  <div class="profile">
+  <div class="row">
     <KeyLearner bind:learning onCancel={() => (learning = false)} />
   </div>
 
@@ -433,15 +489,21 @@
     color: var(--he-override);
     margin: 0;
   }
-  .profile {
+  .row {
     display: flex;
     gap: var(--he-space, 0.5rem);
     align-items: center;
     flex-wrap: wrap;
   }
-  .notice {
-    color: var(--he-override, #d9a05b);
-    margin: 0;
+  .top {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding-right: 0.75rem;
+    background: var(--he-surface);
+  }
+  .top :global(header) {
+    flex: 1;
   }
   .keys {
     list-style: none;

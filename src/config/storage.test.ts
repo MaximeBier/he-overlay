@@ -301,15 +301,39 @@ describe('profiles that must not eat one another', () => {
     expect(store.load('Default').config.keys).toHaveLength(2);
   });
 
-  it('refuses a rename onto a name already taken', () => {
+  it('refuses a rename onto a name already taken, and says so', () => {
+    // Uniquifying would be wrong here, unlike on create: someone typing an
+    // existing name over a profile means one of the two, and silently landing
+    // on "Default 2" answers neither.
     const store = createProfileStore(profileStorage());
     store.create('Valorant');
     store.save('Valorant', withKeys(aKey));
 
-    store.rename('Valorant', 'Default');
-
+    expect(store.rename('Valorant', 'Default')).toBe(false);
     expect(store.list()).toEqual(['Default', 'Valorant']);
     expect(store.load('Valorant').config.keys).toHaveLength(1);
+  });
+
+  it('reports a rename that went through', () => {
+    const store = createProfileStore(profileStorage());
+
+    expect(store.rename('Default', 'Main')).toBe(true);
+  });
+
+  it('refuses a rename to nothing at all', () => {
+    const store = createProfileStore(profileStorage());
+
+    expect(store.rename('Default', '   ')).toBe(false);
+    expect(store.list()).toEqual(['Default']);
+  });
+
+  it('takes a rename to the same name as done, not as a collision', () => {
+    // Submitting an unchanged field is not an error, and reporting one would
+    // put an "already exists" in front of someone who changed nothing.
+    const store = createProfileStore(profileStorage());
+
+    expect(store.rename('Default', 'Default')).toBe(true);
+    expect(store.list()).toEqual(['Default']);
   });
 });
 
