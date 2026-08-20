@@ -3,6 +3,7 @@ import { render, cleanup } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import LayoutEditor from './LayoutEditor.svelte';
 import { DEFAULT_STYLE, defaultConfig, type OverlayConfig } from '../config/schema';
+import { setKeyStyle } from '../config/edit';
 
 afterEach(cleanup);
 
@@ -141,5 +142,158 @@ describe('LayoutEditor - writing only what changed', () => {
 
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange.mock.calls[0]![0].keys[0]).toMatchObject({ x: 2 });
+  });
+});
+
+describe('LayoutEditor - the popover is a place you go, not one you fall into', () => {
+  const isOpen = (container: Element) => container.querySelector('[role="dialog"]') !== null;
+
+  it('selects on a plain click without opening anything', () => {
+    // The mockup is explicit (spec §16.5): a click selects, and that is all.
+    // Opening the editor on every click puts a panel over the layout being
+    // arranged, which is what one is looking at.
+    const { handles, container } = editor();
+
+    handles[0]!.dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 1 }),
+    );
+    window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1 }));
+
+    expect(isOpen(container)).toBe(false);
+  });
+
+  it('opens on a double click', async () => {
+    const { handles, container } = editor();
+
+    handles[0]!.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    await tick();
+
+    expect(isOpen(container)).toBe(true);
+  });
+
+  it('opens on Enter, so the keyboard reaches it too', async () => {
+    const { handles, container } = editor();
+
+    handles[0]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await tick();
+
+    expect(isOpen(container)).toBe(true);
+  });
+
+  it('opens on a right click, and swallows the native menu', async () => {
+    const { handles, container } = editor();
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+
+    handles[0]!.dispatchEvent(event);
+    await tick();
+
+    expect(isOpen(container)).toBe(true);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it('hides while a key is dragged and comes back on the drop', async () => {
+    const { handles, container } = editor();
+    const stage = container.querySelector('.stage')!;
+
+    handles[0]!.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    await tick();
+
+    press(handles[0]!);
+    move(stage, { clientX: TWO_KEYS_ACROSS, clientY: 0 });
+    await tick();
+    // A panel that follows the key across the stage is unreadable, and one
+    // that stays put covers where the key is going.
+    expect(isOpen(container)).toBe(false);
+
+    window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1 }));
+    await tick();
+    expect(isOpen(container)).toBe(true);
+  });
+
+  it('closes when the press lands on a key outside the selection', async () => {
+    const { handles, container } = editor();
+
+    handles[0]!.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    await tick();
+
+    press(handles[1]!);
+    await tick();
+
+    expect(isOpen(container)).toBe(false);
+  });
+
+  it('gives Escape the popover before the selection', async () => {
+    // Two things to undo and one key to do it with. Clearing the selection
+    // first would leave the popover anchored to nothing.
+    const { handles, container } = editor();
+
+    handles[0]!.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    await tick();
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await tick();
+    expect(isOpen(container)).toBe(false);
+    expect(handles[0]!.getAttribute('aria-pressed')).toBe('true');
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await tick();
+    expect(handles[0]!.getAttribute('aria-pressed')).toBe('false');
+  });
+});
+
+describe('LayoutEditor - a customized key says so', () => {
+  it('marks the keys that override something', () => {
+    // Without it: you style one key, forget, and hunt months later for why it
+    // does not react like the others (spec §8.2).
+    const { handles } = editor(setKeyStyle(twoKeys(), [2], 'activeColor', '#ff0000'));
+
+    expect(handles[0]!.classList.contains('overridden')).toBe(false);
+    expect(handles[1]!.classList.contains('overridden')).toBe(true);
+  });
+});
+
+describe('LayoutEditor - pressing nothing means nothing selected', () => {
+  it('drops the selection when the press lands on bare stage', async () => {
+    const { handles, container } = editor();
+    const stage = container.querySelector('.stage')!;
+
+    press(handles[0]!);
+    window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1 }));
+    await tick();
+    expect(handles[0]!.getAttribute('aria-pressed')).toBe('true');
+
+    stage.dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 2 }),
+    );
+    await tick();
+
+    expect(handles[0]!.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('keeps the selection when the press lands on a key', async () => {
+    // The handles are children of the stage, so an unguarded handler would
+    // clear the selection on the way to every key it is meant to select.
+    const { handles } = editor();
+
+    press(handles[0]!);
+    window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1 }));
+    await tick();
+
+    expect(handles[0]!.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('closes the popover too', async () => {
+    const { handles, container } = editor();
+    const stage = container.querySelector('.stage')!;
+
+    handles[0]!.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    await tick();
+
+    stage.dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 2 }),
+    );
+    await tick();
+
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
   });
 });

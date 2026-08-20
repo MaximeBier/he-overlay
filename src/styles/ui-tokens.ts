@@ -11,7 +11,10 @@ export const UI_TOKENS = {
   surface: '#151823',
   popover: '#141722',
   border: '#1B1E27',
+  borderControl: '#232838',
   borderPopover: '#262B3A',
+  /** Also the disabled dot. The mockup gives one value both jobs. */
+  borderHover: '#3A4054',
   accent: '#7C9EFF',
   accentHover: '#a5bcff',
   override: '#D9A05B',
@@ -23,7 +26,14 @@ export const UI_TOKENS = {
   textGhost: '#4A4F60',
   font: "400 14px 'Archivo', system-ui, sans-serif",
   fontMono: "400 12px 'IBM Plex Mono', ui-monospace, monospace",
+  /**
+   * Three radii, not one. The mockup gives inputs 4 px, tiles and buttons 5,
+   * panels and popovers 6 — a hierarchy small enough to look accidental and
+   * consistent enough that flattening it reads as sloppy at a glance.
+   */
   radius: '4px',
+  radiusControl: '5px',
+  radiusPanel: '6px',
   space: '0.5rem',
   headerHeight: '50px',
   panelWidth: '300px',

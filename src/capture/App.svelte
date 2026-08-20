@@ -12,10 +12,14 @@
   import { loadSettings, saveSettings, overlayUrl, browserStorage } from './settings';
   import { createOverlayRegistry } from './overlays';
   import { createConfigBroadcaster } from './broadcast';
-  import { addLearnedKey, pickLearned, removeKey } from './learn';
-  import { loadLayoutMap, type LayoutMapLike } from '../keyboard/labels';
+  import { addLearnedKey, pickLearned, removeKey, removeKeys } from './learn';
+  import { loadLayoutMap, resolveLayout, type LayoutMapLike } from '../keyboard/labels';
+  import { setLayoutOverride } from '../config/edit';
+  import { resolve } from '../config/resolve';
+  import { recommendedSize } from '../view/scene';
   import KeyLearner from './KeyLearner.svelte';
   import LayoutEditor from './LayoutEditor.svelte';
+  import StylePanel from './StylePanel.svelte';
   import { loadConfig, saveConfig, exportConfig, importConfig } from '../config/storage';
   import type { OverlayConfig } from '../config/schema';
   import StatusBar from './StatusBar.svelte';
@@ -36,6 +40,14 @@
   let selectedIds = $state<number[]>([]);
   let layout = $state<LayoutMapLike | null>(null);
   void loadLayoutMap(navigator).then((map) => (layout = map));
+
+  // What the labels are actually read from: the explicit choice always beats
+  // detection, which is the only reason the choice exists (spec §8.6).
+  const activeLayout = $derived(resolveLayout(config.layoutOverride, layout));
+
+  // The packed size, which is the only one worth quoting: the raw box has an
+  // empty top and left by construction (spec §5.4).
+  const size = $derived(recommendedSize(resolve(config)));
 
   let rate = $state(0);
   let overlayCount = $state(0);
@@ -233,7 +245,7 @@
       // One key per activation: the mode closes itself, so holding the key
       // down cannot add it a second time.
       learning = false;
-      updateConfig(addLearnedKey(config, learned, layout));
+      updateConfig(addLearnedKey(config, learned, activeLayout));
     },
     onKeys: (k) => {
       frame = k;
@@ -284,6 +296,13 @@
     <input readonly value={url} />
   </label>
 
+  {#if config.keys.length > 0}
+    <p class="quiet">
+      Recommended source size: <code>{size.width} × {size.height}</code> — the overlay pulls the keys
+      into the top-left corner, so this is smaller than the editor stage.
+    </p>
+  {/if}
+
   <div class="profile">
     <button onclick={downloadProfile}>Export profile</button>
     <label>
@@ -304,6 +323,33 @@
        editor decorations on, which the broadcast never gets. -->
   <LayoutEditor {config} {frame} bind:selectedIds onChange={updateConfig} />
 
+  <!-- Global appearance. Per-key overrides live in the popover the editor
+       anchors to the selection, never here (spec §16.4). -->
+  <StylePanel {config} onChange={updateConfig} />
+
+  <!-- Deliberately discreet, and placed last: an edge case that matters only
+       when detection got it wrong (spec §16.4, §8.6). Changing it relabels the
+       keys already added — that is what it is for. -->
+  <label class="quiet">
+    Keyboard layout
+    <select
+      value={config.layoutOverride}
+      onchange={(event) =>
+        updateConfig(
+          setLayoutOverride(
+            config,
+            event.currentTarget.value as OverlayConfig['layoutOverride'],
+            layout,
+          ),
+        )}
+    >
+      <option value="auto">Auto — detected</option>
+      <option value="azerty">AZERTY</option>
+      <option value="qwerty">QWERTY</option>
+      <option value="qwertz">QWERTZ</option>
+    </select>
+  </label>
+
   {#if config.keys.length > 0}
     <ul class="keys">
       {#each config.keys as key (key.id)}
@@ -314,6 +360,20 @@
         </li>
       {/each}
     </ul>
+
+    {#if selectedIds.length > 1}
+      <!-- Under the list, not in the editor: the popover already deletes the
+           selection, and a second button on the stage would sit next to it
+           saying the same thing (spec §16.4). -->
+      <button
+        onclick={() => {
+          updateConfig(removeKeys(config, selectedIds));
+          selectedIds = [];
+        }}
+      >
+        Delete {selectedIds.length} selected keys
+      </button>
+    {/if}
   {/if}
 </main>
 
@@ -354,6 +414,13 @@
   .label {
     min-width: 4rem;
     font-weight: 700;
+  }
+  .quiet {
+    display: flex;
+    gap: var(--he-space, 0.5rem);
+    align-items: center;
+    font-size: 12px;
+    color: var(--he-text-muted, #8b90a0);
   }
   .index {
     color: var(--he-text-muted, #8b90a0);
