@@ -1,5 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { GRID, moveKey, moveKeysBy, pixelsToUnits, resizeKeys, setMode, snap } from './layout';
+import {
+  GRID,
+  keysWithin,
+  moveKey,
+  moveKeysBy,
+  normalizeRect,
+  pixelsToUnits,
+  resizeKeys,
+  setMode,
+  snap,
+} from './layout';
 import { defaultConfig, type OverlayConfig } from '../config/schema';
 
 function config(): OverlayConfig {
@@ -169,5 +179,67 @@ describe('setMode', () => {
 
     expect(after.keys[0]).toMatchObject({ id: 1, label: 'A', x: 0, y: 0, w: 1, h: 1 });
     expect(before.keys[0]?.mode).toBe('key');
+  });
+});
+
+describe('keysWithin', () => {
+  // A row of three unit keys with a one-unit hole where the second would be.
+  const row = (): OverlayConfig => {
+    const config = defaultConfig();
+    config.keys.push(
+      { id: 1, usage: 0x14, mode: 'key', label: 'A', x: 0, y: 0, w: 1, h: 1 },
+      { id: 2, usage: 0x16, mode: 'key', label: 'S', x: 2, y: 0, w: 1, h: 1 },
+      { id: 3, usage: 0x07, mode: 'key', label: 'D', x: 0, y: 2, w: 2, h: 1 },
+    );
+    return config;
+  };
+
+  it('takes the keys the rectangle covers whole', () => {
+    expect(keysWithin(row(), { x: -1, y: -1, w: 5, h: 2 })).toEqual([1, 2]);
+  });
+
+  it('takes a key the rectangle merely clips', () => {
+    // Requiring full containment means a lasso has to be drawn around the
+    // outside of everything, which cannot be done against the edge of the
+    // stage. Clipping one corner is enough.
+    expect(keysWithin(row(), { x: 0.75, y: 0.75, w: 0.5, h: 0.5 })).toEqual([1]);
+  });
+
+  it('leaves alone what it does not reach', () => {
+    expect(keysWithin(row(), { x: 1.1, y: 0, w: 0.5, h: 1 })).toEqual([]);
+  });
+
+  it('does not take a key it only runs alongside', () => {
+    // Edge to edge is not overlap. Otherwise a lasso stopped cleanly against a
+    // key takes it, and the gesture cannot be aimed.
+    expect(keysWithin(row(), { x: -1, y: 0, w: 1, h: 1 })).toEqual([]);
+  });
+
+  it('takes nothing from a rectangle with no area', () => {
+    // A click on bare stage is a drag of zero size — and "bare stage" includes
+    // the gap between two keys, which is inside a key's cell. Without this,
+    // clicking to clear the selection would select the key next to the gap.
+    expect(keysWithin(row(), { x: 0.5, y: 0.5, w: 0, h: 0 })).toEqual([]);
+    expect(keysWithin(row(), { x: 0.5, y: 0.5, w: 0.4, h: 0 })).toEqual([]);
+  });
+
+  it('returns ids in configuration order, whatever the rectangle', () => {
+    expect(keysWithin(row(), { x: -1, y: -1, w: 9, h: 9 })).toEqual([1, 2, 3]);
+  });
+});
+
+describe('normalizeRect', () => {
+  it('leaves a rectangle drawn down and right alone', () => {
+    expect(normalizeRect({ x: 1, y: 2 }, { x: 4, y: 6 })).toEqual({ x: 1, y: 2, w: 3, h: 4 });
+  });
+
+  it('turns a rectangle drawn up and left the right way round', () => {
+    // Half of all lassos are drawn backwards, and a negative width selects
+    // nothing at all — the gesture would work in two directions out of four.
+    expect(normalizeRect({ x: 4, y: 6 }, { x: 1, y: 2 })).toEqual({ x: 1, y: 2, w: 3, h: 4 });
+  });
+
+  it('handles the two mixed directions too', () => {
+    expect(normalizeRect({ x: 4, y: 2 }, { x: 1, y: 6 })).toEqual({ x: 1, y: 2, w: 3, h: 4 });
   });
 });

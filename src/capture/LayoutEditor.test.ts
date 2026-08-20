@@ -363,3 +363,138 @@ describe('LayoutEditor - a half-typed field is not thrown away', () => {
     expect(blurred).toHaveBeenCalled();
   });
 });
+
+describe('LayoutEditor - lasso selection', () => {
+  // jsdom gives every element a zero-origin bounding box, so a client
+  // coordinate is a stage coordinate. One key is `DEFAULT_STYLE.unit` across.
+  const HALF_KEY = DEFAULT_STYLE.unit / 2;
+
+  const selected = (container: HTMLElement) =>
+    [...container.querySelectorAll('button.handle')]
+      .map((handle, index) => (handle.getAttribute('aria-pressed') === 'true' ? index + 1 : 0))
+      .filter(Boolean);
+
+  const marquee = (container: HTMLElement) => container.querySelector('.lasso');
+
+  const release = () =>
+    window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1 }));
+
+  it('takes the keys the rectangle covers', async () => {
+    const { container } = editor();
+    const stage = container.querySelector('.stage')!;
+
+    press(stage, { clientX: 1, clientY: 1 });
+    move(stage, { clientX: TWO_KEYS_ACROSS, clientY: HALF_KEY });
+    await tick();
+
+    expect(selected(container)).toEqual([1, 2]);
+  });
+
+  it('stops where the rectangle stops', async () => {
+    const { container } = editor();
+    const stage = container.querySelector('.stage')!;
+
+    press(stage, { clientX: 1, clientY: 1 });
+    move(stage, { clientX: HALF_KEY, clientY: HALF_KEY });
+    await tick();
+
+    expect(selected(container)).toEqual([1]);
+  });
+
+  it('works drawn backwards, up and to the left', async () => {
+    // Half of all lassos are. Left to a negative extent this selects nothing,
+    // and the gesture appears to fail at random.
+    const { container } = editor();
+    const stage = container.querySelector('.stage')!;
+
+    press(stage, { clientX: HALF_KEY, clientY: HALF_KEY });
+    move(stage, { clientX: 1, clientY: 1 });
+    await tick();
+
+    expect(selected(container)).toEqual([1]);
+  });
+
+  it('shows the rectangle while it is being drawn, and not after', async () => {
+    const { container } = editor();
+    const stage = container.querySelector('.stage')!;
+
+    press(stage, { clientX: 1, clientY: 1 });
+    move(stage, { clientX: HALF_KEY, clientY: HALF_KEY });
+    await tick();
+    expect(marquee(container)).not.toBeNull();
+
+    release();
+    await tick();
+    expect(marquee(container)).toBeNull();
+  });
+
+  it('adds to the selection when Shift is held, as Shift+click does', async () => {
+    const { container, handles } = editor();
+    const stage = container.querySelector('.stage')!;
+
+    press(handles[1]!);
+    release();
+    await tick();
+
+    press(stage, { clientX: 1, clientY: 1, shiftKey: true });
+    move(stage, { clientX: HALF_KEY, clientY: HALF_KEY });
+    await tick();
+
+    expect(selected(container)).toEqual([1, 2]);
+  });
+
+  it('still clears the selection on a press that goes nowhere', async () => {
+    // The behaviour bare stage had before the lasso existed. A marquee of no
+    // size must not become a way to keep a selection one clicked away from.
+    const { container, handles } = editor();
+
+    press(handles[0]!);
+    release();
+    await tick();
+    expect(selected(container)).toEqual([1]);
+
+    press(container.querySelector('.stage')!, { clientX: 1, clientY: 1 });
+    release();
+    await tick();
+
+    expect(selected(container)).toEqual([]);
+  });
+
+  it('never starts from a key: pressing one drags it', async () => {
+    const { container, handles } = editor();
+
+    press(handles[0]!, { clientX: 1, clientY: 1 });
+    move(container.querySelector('.stage')!, { clientX: HALF_KEY, clientY: HALF_KEY });
+    await tick();
+
+    expect(marquee(container)).toBeNull();
+  });
+
+  it('takes the rectangle away with the gesture on Escape', async () => {
+    const { container } = editor();
+    const stage = container.querySelector('.stage')!;
+
+    press(stage, { clientX: 1, clientY: 1 });
+    move(stage, { clientX: TWO_KEYS_ACROSS, clientY: HALF_KEY });
+    await tick();
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await tick();
+
+    expect(marquee(container)).toBeNull();
+    expect(selected(container)).toEqual([]);
+  });
+
+  it('drops the rectangle when the release happened out of sight', async () => {
+    // Same failure the drag has: a pointerup outside the window leaves the
+    // marquee following the mouse with nothing held down.
+    const { container } = editor();
+    const stage = container.querySelector('.stage')!;
+
+    press(stage, { clientX: 1, clientY: 1 });
+    move(stage, { clientX: HALF_KEY, clientY: HALF_KEY, buttons: 0 });
+    await tick();
+
+    expect(marquee(container)).toBeNull();
+  });
+});

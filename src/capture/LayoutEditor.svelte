@@ -2,7 +2,7 @@
   import KeyboardView from '../view/KeyboardView.svelte';
   import KeyPopover from './KeyPopover.svelte';
   import { hasOverrides, resolve } from '../config/resolve';
-  import { moveKeysBy, pixelsToUnits } from './layout';
+  import { keysWithin, moveKeysBy, normalizeRect, pixelsToUnits, type Point } from './layout';
   import { removeKeys } from './learn';
   import type { OverlayConfig } from '../config/schema';
   import type { LayoutMapLike } from '../keyboard/labels';
@@ -60,6 +60,19 @@
    */
   let editingFor = $state<number[]>([]);
 
+  /**
+   * The marquee in progress, in key units, or `null` when none is.
+   *
+   * `base` is the selection the lasso adds to — empty unless Shift was held
+   * when it started. Recorded once rather than read from `selectedIds`, which
+   * the gesture rewrites on every move.
+   */
+  let lasso = $state<{ from: Point; to: Point; base: number[] } | null>(null);
+  let stage = $state<HTMLElement | null>(null);
+
+  /** In key units, the two corners the right way round. */
+  const lassoRect = $derived(lasso === null ? null : normalizeRect(lasso.from, lasso.to));
+
   /** What the editor shows: the draft while dragging, the real one otherwise. */
   const shown = $derived(draft ?? config);
   const scene = $derived(resolve(shown));
@@ -111,9 +124,30 @@
    */
   function onStagePointerDown(event: PointerEvent) {
     if (event.target !== event.currentTarget) return;
+    // Primary button only, as on the handles: a right-click would arm a
+    // marquee whose release the context menu swallows.
+    if (event.button !== 0) return;
+
     commitPendingEdit();
-    selectedIds = [];
     editingFor = [];
+
+    // Shift adds, matching Shift+click. Without it the press clears, which is
+    // the behaviour bare stage had before the lasso existed — a marquee that
+    // selects nothing still ends with an empty selection.
+    const base = event.shiftKey ? [...selectedIds] : [];
+    selectedIds = base;
+
+    const at = stagePoint(event);
+    lasso = { from: at, to: at, base };
+  }
+
+  /** Where the pointer is on the stage, in key units. */
+  function stagePoint(event: PointerEvent): Point {
+    const box = stage?.getBoundingClientRect();
+    return {
+      x: pixelsToUnits(event.clientX - (box?.left ?? 0), unit),
+      y: pixelsToUnits(event.clientY - (box?.top ?? 0), unit),
+    };
   }
 
   function toggle(id: number) {
@@ -168,6 +202,22 @@
   }
 
   function onPointerMove(event: PointerEvent) {
+    if (lasso) {
+      // Same guard as the drag: a release we never saw would leave the
+      // marquee following the pointer with nothing held down.
+      if (event.buttons === 0) {
+        lasso = null;
+        return;
+      }
+
+      lasso = { ...lasso, to: stagePoint(event) };
+      // Live, because a marquee that only reports on release is a rectangle
+      // one has to aim blind. Nothing is persisted or broadcast by a
+      // selection, so the cost is a filter over a handful of keys.
+      selectedIds = [...new Set([...lasso.base, ...keysWithin(shown, lassoRect!)])];
+      return;
+    }
+
     if (!drag || !draft) return;
     // No button held means the release happened somewhere we never saw it —
     // outside the window, or after the handle was removed from the DOM and
@@ -187,9 +237,17 @@
   function abandon() {
     drag = null;
     draft = null;
+    // The selection the marquee built is kept: it is what one was aiming at,
+    // and Escape clears it on the next press anyway.
+    lasso = null;
   }
 
   function onPointerUp() {
+    if (lasso) {
+      lasso = null;
+      return;
+    }
+
     if (!drag || !draft) return;
 
     // Compared against the origins rather than "a pointermove happened": a
@@ -276,7 +334,7 @@
   <!-- The stage is a surface, not a control, and it needs no keyboard path of
        its own: Escape already clears the selection from anywhere. -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="stage" onpointerdown={onStagePointerDown}>
+  <div class="stage" bind:this={stage} onpointerdown={onStagePointerDown}>
     <KeyboardView config={scene} {frame} decorations />
     {#each shown.keys as key (key.id)}
       <button
@@ -302,6 +360,16 @@
       ></button>
     {/each}
 
+    {#if lassoRect}
+      <div
+        class="lasso"
+        style:left={`${lassoRect.x * unit}px`}
+        style:top={`${lassoRect.y * unit}px`}
+        style:width={`${lassoRect.w * unit}px`}
+        style:height={`${lassoRect.h * unit}px`}
+      ></div>
+    {/if}
+
     {#if popoverVisible}
       <div class="anchor" style:left={`${anchor.x}px`} style:top={`${anchor.y + gap}px`}>
         <KeyPopover
@@ -318,7 +386,8 @@
   </div>
 
   <p class="shortcuts">
-    Click to select · Shift+click to add · Double-click to edit · Ctrl+A for all · Delete to remove
+    Click to select · Shift+click to add · Drag the background to lasso · Double-click to edit ·
+    Ctrl+A for all · Delete to remove
   </p>
 </div>
 
@@ -327,6 +396,15 @@
     display: grid;
     gap: var(--he-space, 0.5rem);
     justify-items: start;
+  }
+  /* Drawn over the keys and under nothing that is clickable: the marquee is
+     feedback, and the pointer must keep reaching the stage beneath it. */
+  .lasso {
+    position: absolute;
+    pointer-events: none;
+    border: 1px dashed var(--he-accent, #7c9eff);
+    background: color-mix(in srgb, var(--he-accent, #7c9eff) 12%, transparent);
+    border-radius: var(--he-radius, 4px);
   }
   .stage {
     position: relative;

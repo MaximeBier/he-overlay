@@ -102,3 +102,56 @@ export function setMode(
     keys: config.keys.map((key) => (ids.includes(key.id) ? { ...key, mode } : key)),
   };
 }
+
+export interface Point {
+  x: number;
+  y: number;
+}
+
+/** A rectangle in key units, with a non-negative extent. */
+export interface Rect extends Point {
+  w: number;
+  h: number;
+}
+
+/**
+ * The rectangle between two corners, whichever way round they were drawn.
+ *
+ * Half of all lassos are drawn up and to the left. Left as a negative extent,
+ * those overlap nothing and the gesture would work in two directions out of
+ * four — which reads as the feature being broken at random.
+ */
+export function normalizeRect(from: Point, to: Point): Rect {
+  return {
+    x: Math.min(from.x, to.x),
+    y: Math.min(from.y, to.y),
+    w: Math.abs(to.x - from.x),
+    h: Math.abs(to.y - from.y),
+  };
+}
+
+/**
+ * The keys a lasso touches, in configuration order (spec §8.7).
+ *
+ * Overlap, not containment: requiring a key to sit entirely inside means
+ * drawing around the outside of everything, which cannot be done against the
+ * edge of the stage. Strict comparisons, so edge-to-edge is not overlap — a
+ * lasso stopped cleanly against a key leaves it alone — and a rectangle of no
+ * area, which is what a click on bare stage produces, takes nothing.
+ */
+export function keysWithin(config: OverlayConfig, rect: Rect): number[] {
+  // A lasso with no area is not a lasso, it is a click — and a click on bare
+  // stage lands in the gap between two keys, which belongs to a key's cell.
+  // Overlap alone would select the neighbour of every gap ever clicked.
+  if (rect.w === 0 || rect.h === 0) return [];
+
+  return config.keys
+    .filter(
+      (key) =>
+        key.x < rect.x + rect.w &&
+        rect.x < key.x + key.w &&
+        key.y < rect.y + rect.h &&
+        rect.y < key.y + key.h,
+    )
+    .map((key) => key.id);
+}
