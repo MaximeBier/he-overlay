@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { loadConfig, saveConfig, exportConfig, importConfig } from './storage';
+import { loadConfig, saveConfig, exportConfig, importConfig, createProfileStore } from './storage';
 import { defaultConfig, CONFIG_VERSION, type KeyConfig } from './schema';
 
 function memoryStorage(initial: Record<string, string> = {}) {
@@ -171,5 +171,215 @@ describe('what loading leaves behind in storage', () => {
     };
 
     expect(() => loadConfig(storage)).not.toThrow();
+  });
+});
+
+/** The full surface a profile store needs: it deletes keys, the config store never does. */
+function profileStorage(initial: Record<string, string> = {}) {
+  const map = new Map(Object.entries(initial));
+  return {
+    getItem: (key: string) => map.get(key) ?? null,
+    setItem: (key: string, value: string) => void map.set(key, value),
+    removeItem: (key: string) => void map.delete(key),
+    map,
+  };
+}
+
+function withKeys(...keys: KeyConfig[]) {
+  const config = defaultConfig();
+  config.keys.push(...keys);
+  return config;
+}
+
+const anotherKey: KeyConfig = { ...aKey, id: 175, usage: 0x1a, label: 'Z' };
+
+describe('named profiles', () => {
+  it('starts with a default profile active', () => {
+    const store = createProfileStore(profileStorage());
+
+    expect(store.list()).toEqual(['Default']);
+    expect(store.active()).toBe('Default');
+  });
+
+  it('creates a profile and makes it active', () => {
+    const store = createProfileStore(profileStorage());
+
+    expect(store.create('Valorant')).toBe('Valorant');
+    expect(store.list()).toEqual(['Default', 'Valorant']);
+    expect(store.active()).toBe('Valorant');
+  });
+
+  it('keeps configurations separate between profiles', () => {
+    const store = createProfileStore(profileStorage());
+    store.save('Default', withKeys(aKey));
+    store.create('Valorant');
+
+    expect(store.load('Valorant').config.keys).toEqual([]);
+    expect(store.load('Default').config.keys).toHaveLength(1);
+  });
+
+  it('renames without losing the configuration', () => {
+    const store = createProfileStore(profileStorage());
+    store.save('Default', withKeys(aKey));
+
+    store.rename('Default', 'Main');
+
+    expect(store.list()).toEqual(['Main']);
+    expect(store.active()).toBe('Main');
+    expect(store.load('Main').config.keys).toHaveLength(1);
+  });
+
+  it('refuses to remove the last profile', () => {
+    const store = createProfileStore(profileStorage());
+    store.save('Default', withKeys(aKey));
+
+    store.remove('Default');
+
+    expect(store.list()).toEqual(['Default']);
+    expect(store.load('Default').config.keys).toHaveLength(1);
+  });
+
+  it('switches the active profile to a survivor after removal', () => {
+    const store = createProfileStore(profileStorage());
+    store.create('Valorant');
+    store.remove('Valorant');
+
+    expect(store.active()).toBe('Default');
+  });
+
+  it('remembers the profile that was selected, across a reload', () => {
+    // Switching profiles without writing the choice down means the next launch
+    // silently reopens the previous one — with the overlay following it.
+    const storage = profileStorage();
+    createProfileStore(storage).create('Valorant');
+    createProfileStore(storage).select('Default');
+
+    expect(createProfileStore(storage).active()).toBe('Default');
+  });
+
+  it('falls back to the first profile when the active one is gone', () => {
+    const store = createProfileStore(
+      profileStorage({
+        'he-overlay:profiles': JSON.stringify(['Default']),
+        'he-overlay:active-profile': 'Deleted by hand',
+      }),
+    );
+
+    expect(store.active()).toBe('Default');
+  });
+});
+
+describe('profiles that must not eat one another', () => {
+  it('creates a free name rather than overwriting a profile that exists', () => {
+    // The mockup offers "New profile…" as a plain text field: two people, two
+    // months apart, will type the same name. Reusing it would silently replace
+    // a layout with an empty one — the worst outcome of the whole feature.
+    const store = createProfileStore(profileStorage());
+    store.save('Default', withKeys(aKey));
+
+    const created = store.create('Default');
+
+    expect(created).toBe('Default 2');
+    expect(store.load('Default').config.keys).toHaveLength(1);
+  });
+
+  it('names an empty profile rather than creating a nameless one', () => {
+    const store = createProfileStore(profileStorage());
+
+    expect(store.create('   ')).toBe('Profile');
+  });
+
+  it('duplicates a profile with its keys, under a name of its own', () => {
+    const store = createProfileStore(profileStorage());
+    store.save('Default', withKeys(aKey, anotherKey));
+
+    const copy = store.duplicate('Default');
+
+    expect(copy).toBe('Default copy');
+    expect(store.active()).toBe('Default copy');
+    expect(store.load(copy).config.keys).toHaveLength(2);
+    expect(store.load('Default').config.keys).toHaveLength(2);
+  });
+
+  it('refuses a rename onto a name already taken', () => {
+    const store = createProfileStore(profileStorage());
+    store.create('Valorant');
+    store.save('Valorant', withKeys(aKey));
+
+    store.rename('Valorant', 'Default');
+
+    expect(store.list()).toEqual(['Default', 'Valorant']);
+    expect(store.load('Valorant').config.keys).toHaveLength(1);
+  });
+});
+
+describe('profiles adopt what came before them', () => {
+  const legacy = () =>
+    profileStorage({ 'he-overlay:config': exportConfig(withKeys(aKey, anotherKey)) });
+
+  it('adopts a pre-profile configuration as the default profile', () => {
+    // Everyone upgrading from v0.5 has their whole layout under the old key.
+    // Starting them on an empty Default would read as "the update deleted my
+    // keyboard", and the backup that saves the other failures is not written
+    // here: nothing failed.
+    const store = createProfileStore(legacy());
+
+    expect(store.list()).toEqual(['Default']);
+    expect(store.load('Default').config.keys).toHaveLength(2);
+  });
+
+  it('leaves the old key where it was, so a rollback still finds it', () => {
+    const storage = legacy();
+    const before = storage.map.get('he-overlay:config');
+
+    createProfileStore(storage);
+
+    expect(storage.map.get('he-overlay:config')).toBe(before);
+  });
+
+  it('never adopts twice, so an old key cannot come back over a real profile', () => {
+    const storage = legacy();
+    createProfileStore(storage).save('Default', defaultConfig());
+
+    expect(createProfileStore(storage).load('Default').config.keys).toEqual([]);
+  });
+});
+
+describe('what a profile says about itself', () => {
+  it('counts the keys of a profile that is not the active one', () => {
+    const store = createProfileStore(profileStorage());
+    store.save('Default', withKeys(aKey, anotherKey));
+    store.create('Valorant');
+
+    expect(store.keyCount('Default')).toBe(2);
+    expect(store.keyCount('Valorant')).toBe(0);
+  });
+
+  it('reports an unreadable profile instead of pretending it was empty', () => {
+    // Spec §16.6: the profile menu line has to be able to say that we started
+    // from the defaults. Swallowing the failure into an empty configuration is
+    // indistinguishable from a profile someone really did empty.
+    const store = createProfileStore(
+      profileStorage({
+        'he-overlay:profiles': JSON.stringify(['Default']),
+        'he-overlay:profile:Default': '{{{',
+      }),
+    );
+
+    const loaded = store.load('Default');
+
+    expect(loaded.problem).toBe('unreadable');
+    expect(loaded.config).toEqual(defaultConfig());
+  });
+
+  it('keeps an unreadable profile aside, as the single configuration did', () => {
+    const storage = profileStorage({
+      'he-overlay:profiles': JSON.stringify(['Default']),
+      'he-overlay:profile:Default': '{{{',
+    });
+
+    createProfileStore(storage).load('Default');
+
+    expect(storage.map.get('he-overlay:profile:Default.backup')).toBe('{{{');
   });
 });

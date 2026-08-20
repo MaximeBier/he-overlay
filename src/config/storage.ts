@@ -2,6 +2,12 @@ import { migrate, type MigrationResult } from './migrate';
 import { defaultConfig, type OverlayConfig } from './schema';
 
 const KEY = 'he-overlay:config';
+const PROFILES_KEY = 'he-overlay:profiles';
+const ACTIVE_KEY = 'he-overlay:active-profile';
+const DEFAULT_PROFILE = 'Default';
+
+const profileKey = (name: string) => `he-overlay:profile:${name}`;
+
 /**
  * Where a configuration we refused to load is kept.
  *
@@ -10,10 +16,13 @@ const KEY = 'he-overlay:config';
  * running cached JavaScript, would otherwise cost an evening of layout work
  * between the warning and the first change the user makes.
  */
-const BACKUP_KEY = 'he-overlay:config.backup';
+const backupKey = (key: string) => `${key}.backup`;
 
 /** Storage that can be read and written. Writing may fail; reading may not. */
 type Store = Pick<Storage, 'getItem' | 'setItem'>;
+
+/** Profiles also delete: a single configuration never had anything to remove. */
+type ProfileStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
 function write(storage: Pick<Storage, 'setItem'>, key: string, value: string): void {
   try {
@@ -41,23 +50,27 @@ export interface LoadedConfig {
  * to the defaults and report what happened, rather than leaving the user in
  * front of a page that does nothing.
  */
-export function loadConfig(storage: Store): LoadedConfig {
-  const raw = storage.getItem(KEY);
+function loadAt(storage: Store, key: string): LoadedConfig {
+  const raw = storage.getItem(key);
   if (!raw) return { config: defaultConfig(), problem: null, dropped: 0 };
 
   const result = importConfig(raw);
 
   if (!result.ok) {
-    write(storage, BACKUP_KEY, raw);
+    write(storage, backupKey(key), raw);
     return { config: defaultConfig(), problem: result.reason, dropped: 0 };
   }
 
   // The cleaned version is the one in use, so it is the one that belongs in
   // storage. Left unwritten, the "keys were dropped" notice comes back on
   // every reload, about something the user cannot act on.
-  if (result.dropped > 0) saveConfig(storage, result.config);
+  if (result.dropped > 0) write(storage, key, exportConfig(result.config));
 
   return { config: result.config, problem: null, dropped: result.dropped };
+}
+
+export function loadConfig(storage: Store): LoadedConfig {
+  return loadAt(storage, KEY);
 }
 
 export function saveConfig(storage: Pick<Storage, 'setItem'>, config: OverlayConfig): void {
@@ -75,4 +88,155 @@ export function importConfig(json: string): MigrationResult {
   } catch {
     return { ok: false, reason: 'unreadable' };
   }
+}
+
+/**
+ * One configuration per game (spec §8.8).
+ *
+ * Every name is taken as given and never reused: creating over an existing
+ * profile would replace a layout with an empty one, which is the only way this
+ * feature can lose work that nothing else can recover.
+ */
+export interface ProfileStore {
+  list(): string[];
+  active(): string;
+  /** Persists the choice. A switch nobody wrote down is undone by the next reload. */
+  select(name: string): void;
+  /** For the menu, which quotes it beside every name. Never rewrites storage. */
+  keyCount(name: string): number;
+  load(name: string): LoadedConfig;
+  save(name: string, config: OverlayConfig): void;
+  /** Returns the name actually used, which may not be the one asked for. */
+  create(name: string): string;
+  duplicate(from: string): string;
+  remove(name: string): void;
+  rename(from: string, to: string): void;
+}
+
+function freeName(taken: readonly string[], wanted: string): string {
+  const base = wanted.trim() || 'Profile';
+  if (!taken.includes(base)) return base;
+  for (let suffix = 2; ; suffix += 1) {
+    const candidate = `${base} ${suffix}`;
+    if (!taken.includes(candidate)) return candidate;
+  }
+}
+
+/**
+ * Everything saved before profiles existed becomes the default profile.
+ *
+ * Runs once, on the absence of the profile list — not on the absence of the
+ * default profile, which someone may legitimately have emptied. The old key is
+ * copied rather than moved: it costs a few kilobytes and it is what a
+ * rolled-back deployment reads.
+ */
+function adoptSingleConfig(storage: ProfileStorage): void {
+  if (storage.getItem(PROFILES_KEY) !== null) return;
+  write(storage, PROFILES_KEY, JSON.stringify([DEFAULT_PROFILE]));
+
+  const existing = storage.getItem(KEY);
+  if (existing !== null) write(storage, profileKey(DEFAULT_PROFILE), existing);
+}
+
+export function createProfileStore(storage: ProfileStorage): ProfileStore {
+  adoptSingleConfig(storage);
+
+  function names(): string[] {
+    try {
+      const parsed: unknown = JSON.parse(storage.getItem(PROFILES_KEY) ?? '');
+      if (
+        Array.isArray(parsed) &&
+        parsed.length > 0 &&
+        parsed.every((n) => typeof n === 'string')
+      ) {
+        return parsed as string[];
+      }
+    } catch {
+      // An unreadable list must not lock the application out of its own
+      // configuration: one profile is always better than none.
+    }
+    return [DEFAULT_PROFILE];
+  }
+
+  function writeNames(list: readonly string[]): void {
+    write(storage, PROFILES_KEY, JSON.stringify(list));
+  }
+
+  function activeName(): string {
+    const current = storage.getItem(ACTIVE_KEY);
+    const list = names();
+    return current !== null && list.includes(current) ? current : list[0]!;
+  }
+
+  function add(name: string, raw: string): string {
+    const list = names();
+    const chosen = freeName(list, name);
+    writeNames([...list, chosen]);
+    write(storage, profileKey(chosen), raw);
+    write(storage, ACTIVE_KEY, chosen);
+    return chosen;
+  }
+
+  return {
+    list: names,
+    active: activeName,
+
+    select(name) {
+      if (names().includes(name)) write(storage, ACTIVE_KEY, name);
+    },
+
+    keyCount(name) {
+      const raw = storage.getItem(profileKey(name));
+      if (raw === null) return 0;
+      const result = importConfig(raw);
+      return result.ok ? result.config.keys.length : 0;
+    },
+
+    load(name) {
+      return loadAt(storage, profileKey(name));
+    },
+
+    save(name, config) {
+      write(storage, profileKey(name), exportConfig(config));
+    },
+
+    create(name) {
+      return add(name, exportConfig(defaultConfig()));
+    },
+
+    duplicate(from) {
+      return add(
+        `${from} copy`,
+        storage.getItem(profileKey(from)) ?? exportConfig(defaultConfig()),
+      );
+    },
+
+    remove(name) {
+      const remaining = names().filter((entry) => entry !== name);
+      // Removing the last profile would leave the application without a
+      // configuration, and nothing to switch to.
+      if (remaining.length === 0) return;
+
+      writeNames(remaining);
+      storage.removeItem(profileKey(name));
+      storage.removeItem(backupKey(profileKey(name)));
+      if (activeName() === name) write(storage, ACTIVE_KEY, remaining[0]!);
+    },
+
+    rename(from, to) {
+      const list = names();
+      const target = to.trim();
+      // A rename onto a name already taken is a merge nobody asked for: the
+      // other profile would disappear under this one.
+      if (!target || target === from || !list.includes(from) || list.includes(target)) return;
+
+      const wasActive = activeName() === from;
+      const raw = storage.getItem(profileKey(from));
+
+      writeNames(list.map((entry) => (entry === from ? target : entry)));
+      if (raw !== null) write(storage, profileKey(target), raw);
+      storage.removeItem(profileKey(from));
+      if (wasActive) write(storage, ACTIVE_KEY, target);
+    },
+  };
 }
