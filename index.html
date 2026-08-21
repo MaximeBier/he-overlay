@@ -30,7 +30,9 @@
         padding: 4rem 1.5rem;
         background: var(--bg);
         color: var(--ink);
-        font: 16px/1.6 system-ui, sans-serif;
+        font:
+          16px/1.6 system-ui,
+          sans-serif;
       }
       main {
         max-width: 34rem;
@@ -75,13 +77,12 @@
         <span>Reads the keyboard, drives the overlay, and builds the OBS URL. Chrome only.</span>
       </a>
 
-      <a class="card" href="/overlay.html">
-        <strong>Overlay page</strong>
-        <span
-          >Meant to be added as an OBS browser source, not opened directly — it stays blank
-          until the capture page feeds it.</span
-        >
-      </a>
+      <!--
+        No link to overlay.html. The URL that belongs in OBS carries a port and
+        a password, and this one carries neither: offering it here hands out the
+        wrong address at the exact moment someone is looking for the right one.
+        The capture page builds it, with a Copy button beside it.
+      -->
     </main>
   </body>
 </html>
