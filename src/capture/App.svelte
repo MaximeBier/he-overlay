@@ -23,7 +23,7 @@
   import LayoutEditor from './LayoutEditor.svelte';
   import StylePanel from './StylePanel.svelte';
   import { createProfileStore, exportConfig, importConfig } from '../config/storage';
-  import type { OverlayConfig } from '../config/schema';
+  import { DEFAULT_STYLE, STYLE_KEYS, type OverlayConfig } from '../config/schema';
   import StatusBar from './StatusBar.svelte';
   import Wizard from './Wizard.svelte';
   import Diagnostics from './Diagnostics.svelte';
@@ -407,6 +407,16 @@
     keyboardStatus === 'no-permission' ? 'Allow keyboard' : 'Rescan devices',
   );
 
+  /**
+   * Whether the global style has been touched at all — §9.3's marker.
+   *
+   * Not applied to the port and password, which the fold above once carried:
+   * a password is mandatory for the thing to work, so the dot would be lit
+   * from the first minute and for ever. A marker that is always on says
+   * nothing, and teaches people to stop reading markers.
+   */
+  const styled = $derived(STYLE_KEYS.some((key) => config.style[key] !== DEFAULT_STYLE[key]));
+
   let urlCopied = $state(false);
 
   async function copyUrl() {
@@ -622,38 +632,37 @@
       <!-- Before the style panel, as the lot of 2026-08-21 has it: while
            nothing works yet, the overlay URL is what one comes here for. -->
       <section class="block">
-        <h2>OBS browser source</h2>
-
-        <Gated available={obsStatus === 'identified'} reason="Available once OBS is connected">
-          <div class="url">
-            <input readonly value={url} aria-label="Overlay URL for OBS" />
-            <button class="link" onclick={copyUrl}>{urlCopied ? 'Copied' : 'Copy'}</button>
-          </div>
-
-          {#if config.keys.length > 0}
-            <p class="figure">
-              <span>Recommended source size</span>
-              <span class="value">{size.width} × {size.height} px</span>
-            </p>
-          {/if}
-
-          <p class="state">
-            <span class="dot" data-live={overlayCount > 0} aria-hidden="true"></span>
-            {overlayCount > 0
-              ? 'Overlay connected · receiving frames'
-              : 'No overlay has reported in yet'}
-          </p>
-        </Gated>
-
-        <!-- Not in the mockup, which shows only the URL here and leaves the two
-             fields to the wizard. They have to stay reachable once the setup is
-             done: folded, and flagged when they hold anything unusual. -->
         <Collapsible
-          id="obs-credentials"
-          title="Server port and password"
-          modified={settings.port !== DEFAULT_OBS_PORT || settings.password !== ''}
+          id="obs"
+          title="OBS browser source"
+          note={overlayCount > 0 ? `${overlayCount} overlay` : null}
+          defaultOpen
           {storage}
         >
+          <Gated available={obsStatus === 'identified'} reason="Available once OBS is connected">
+            <div class="url">
+              <input readonly value={url} aria-label="Overlay URL for OBS" />
+              <button class="link" onclick={copyUrl}>{urlCopied ? 'Copied' : 'Copy'}</button>
+            </div>
+
+            {#if config.keys.length > 0}
+              <p class="figure">
+                <span>Recommended source size</span>
+                <span class="value">{size.width} × {size.height} px</span>
+              </p>
+            {/if}
+
+            <p class="state">
+              <span class="dot" data-live={overlayCount > 0} aria-hidden="true"></span>
+              {overlayCount > 0
+                ? 'Overlay connected · receiving frames'
+                : 'No overlay has reported in yet'}
+            </p>
+          </Gated>
+
+          <!-- Not in the mockup, which shows only the URL here and leaves the
+               two fields to the wizard. They have to stay reachable once the
+               setup is done and the wizard is gone for good. -->
           <label class="field">
             Port
             <input
@@ -678,43 +687,46 @@
       <!-- Global appearance. Per-key overrides live in the popover the editor
            anchors to the selection, never here (spec §16.4). -->
       <section class="block">
-        <StylePanel {config} onChange={updateConfig} />
+        <Collapsible id="style" title="Global style · all keys" modified={styled} {storage}>
+          <StylePanel {config} onChange={updateConfig} />
+        </Collapsible>
       </section>
 
-      <section class="block">
-        <h2>Keys · {config.keys.length}</h2>
-        {#if config.keys.length === 0}
-          <p class="fine">No keys yet.</p>
-        {:else}
-          <ul class="keys">
-            {#each config.keys as key (key.id)}
-              <li class:selected={selectedIds.includes(key.id)}>
-                <span class="label">{key.label}</span>
-                <span class="mode">{key.mode}</span>
-                {#if hasOverrides(key)}<span class="override">override</span>{/if}
-                <button
-                  class="trash"
-                  aria-label={'Delete ' + key.label}
-                  onclick={() => updateConfig(removeKey(config, key.id))}
-                >
-                  🗑
-                </button>
-              </li>
-            {/each}
-          </ul>
+      <section class="block keys-block">
+        <Collapsible id="keys" title="Keys" note={String(config.keys.length)} defaultOpen {storage}>
+          {#if config.keys.length === 0}
+            <p class="fine">No keys yet.</p>
+          {:else}
+            <ul class="keys">
+              {#each config.keys as key (key.id)}
+                <li class:selected={selectedIds.includes(key.id)}>
+                  <span class="label">{key.label}</span>
+                  <span class="mode">{key.mode}</span>
+                  {#if hasOverrides(key)}<span class="override">override</span>{/if}
+                  <button
+                    class="trash"
+                    aria-label={'Delete ' + key.label}
+                    onclick={() => updateConfig(removeKey(config, key.id))}
+                  >
+                    🗑
+                  </button>
+                </li>
+              {/each}
+            </ul>
 
-          {#if selectedIds.length > 1}
-            <button
-              class="link"
-              onclick={() => {
-                updateConfig(removeKeys(config, selectedIds));
-                selectedIds = [];
-              }}
-            >
-              Delete {selectedIds.length} selected keys
-            </button>
+            {#if selectedIds.length > 1}
+              <button
+                class="link"
+                onclick={() => {
+                  updateConfig(removeKeys(config, selectedIds));
+                  selectedIds = [];
+                }}
+              >
+                Delete {selectedIds.length} selected keys
+              </button>
+            {/if}
           {/if}
-        {/if}
+        </Collapsible>
       </section>
 
       <footer class="foot">
@@ -869,8 +881,15 @@
     display: flex;
     flex-direction: column;
     gap: 9px;
-    padding: 16px 18px;
+    padding: 10px 18px;
     border-block-end: 1px solid var(--he-border, #1b1e27);
+  }
+  /* The one section worth the leftover room: folding the others is what this
+     is for. */
+  .keys-block {
+    flex: 1;
+    min-block-size: 0;
+    overflow-y: auto;
   }
   .foot {
     margin-block-start: auto;
@@ -879,14 +898,6 @@
     padding: 11px 18px;
     border-block-start: 1px solid var(--he-border, #1b1e27);
     background: var(--he-stage, #0b0d11);
-  }
-
-  h2 {
-    margin: 0;
-    font-size: var(--he-size-sm, 15.5px);
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    color: var(--he-text-muted, #8b90a0);
   }
 
   .url {

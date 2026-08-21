@@ -2,6 +2,7 @@
   import KeyboardView from '../view/KeyboardView.svelte';
   import KeyPopover from './KeyPopover.svelte';
   import { hasOverrides, resolve } from '../config/resolve';
+  import { recommendedSize } from '../view/scene';
   import { keysWithin, moveKeysBy, normalizeRect, pixelsToUnits, type Point } from './layout';
   import { removeKeys } from './learn';
   import type { OverlayConfig } from '../config/schema';
@@ -77,6 +78,20 @@
   const shown = $derived(draft ?? config);
   const scene = $derived(resolve(shown));
   const selection = $derived(shown.keys.filter((key) => selectedIds.includes(key.id)));
+  /**
+   * What the OBS browser source has to be, in pixels — and the reason it is
+   * here rather than tucked in a panel.
+   *
+   * OBS fixes a browser source's size when the source is created, and never
+   * revises it. Every key added past that size is simply cropped, silently,
+   * on both sides at once: the capture page looks right and the scene looks
+   * wrong. Keeping the figure in view, next to the keys that determine it, is
+   * what turns that into something anyone can notice.
+   *
+   * Read from the draft during a drag, so it moves as the layout does.
+   */
+  const source = $derived(recommendedSize(scene));
+
   const unit = $derived(shown.style.unit);
   const gap = $derived(shown.style.gap);
 
@@ -385,10 +400,18 @@
     {/if}
   </div>
 
-  <p class="shortcuts">
-    Click to select · Shift+click to add · Drag the background to lasso · Double-click to edit ·
-    Ctrl+A for all · Delete to remove
-  </p>
+  <div class="foot">
+    {#if shown.keys.length > 0}
+      <p class="source">
+        Recommended OBS browser source · <code>{source.width} × {source.height} px</code>
+      </p>
+    {/if}
+
+    <p class="shortcuts">
+      Click to select · Shift+click to add · Drag the background to lasso · Double-click to edit ·
+      Ctrl+A for all · Delete to remove
+    </p>
+  </div>
 </div>
 
 <style>
@@ -488,10 +511,27 @@
        context here, so the popover cannot escape it and cover the sidebar. */
     z-index: 1;
   }
-  .shortcuts {
+  .foot {
     flex: none;
-    margin: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
     padding: 9px 18px;
+  }
+  /* Louder than the help text below it: this one is a value to carry to OBS,
+     not a reminder of what the mouse does. */
+  .source {
+    margin: 0;
+    font-size: var(--he-size-sm, 15.5px);
+    color: var(--he-text-muted, #8b90a0);
+  }
+  .source code {
+    font: var(--he-font-mono, 400 15px ui-monospace, monospace);
+    color: var(--he-text, #dde1e9);
+  }
+  .shortcuts {
+    margin: 0;
     text-align: center;
     font-size: var(--he-size-xs, 14px);
     color: var(--he-text-faint, #5a5f70);

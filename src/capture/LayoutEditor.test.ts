@@ -498,3 +498,36 @@ describe('LayoutEditor - lasso selection', () => {
     expect(marquee(container)).toBeNull();
   });
 });
+
+describe('LayoutEditor - the size OBS has to be told', () => {
+  it('quotes the packed size, not the room the keys are drawn in', async () => {
+    // OBS fixes a browser source's size once and never revises it. The figure
+    // that matters is the one the overlay actually needs — the packed box —
+    // and the editor's own stage is nothing like it.
+    const config = twoKeys();
+    config.keys[0]!.x = 3;
+    config.keys[1]!.x = 4;
+    const { container } = editor(config);
+
+    const line = container.querySelector('.source code')!;
+
+    expect(line.textContent).toContain(String(2 * DEFAULT_STYLE.unit));
+  });
+
+  it('says nothing at all before there is a layout to size', async () => {
+    const { container } = editor(defaultConfig());
+
+    expect(container.querySelector('.source')).toBeNull();
+  });
+
+  it('follows the drag, so the figure moves with the layout', async () => {
+    const { container, handles } = editor();
+    const before = container.querySelector('.source code')!.textContent;
+
+    press(handles[0]!, { clientX: 0, clientY: 0 });
+    move(container.querySelector('.stage')!, { clientX: 0, clientY: TWO_KEYS_ACROSS });
+    await tick();
+
+    expect(container.querySelector('.source code')!.textContent).not.toBe(before);
+  });
+});
