@@ -26,6 +26,7 @@
   import StatusBar from './StatusBar.svelte';
   import Wizard from './Wizard.svelte';
   import Diagnostics from './Diagnostics.svelte';
+  import Collapsible from './Collapsible.svelte';
   import { createJournal, describeAnomaly, hexDump, type JournalEntry } from './journal';
   import { createStreamProbe, type StreamReading } from './probe';
   import {
@@ -137,7 +138,8 @@
    */
   const journal = createJournal();
   let log = $state<readonly JournalEntry[]>([]);
-  let logOpen = $state(false);
+  /** §9.3: a fold says in its header when what it hides is ours to fix. */
+  const toReport = $derived(log.filter((entry) => entry.kind === 'bug').length);
 
   function note(kind: 'user' | 'bug', message: string) {
     journal.add(kind, message, performance.now());
@@ -145,19 +147,19 @@
   }
 
   /**
-   * The live reading, computed only while someone is looking.
+   * The live reading — a function, not a derived value.
    *
-   * It follows `frame`, which arrives up to sixty times a second. A shut
-   * panel that kept recomputing would make the capture page compete with its
-   * own broadcast, for a list nobody can see.
+   * It follows `frame`, which arrives up to sixty times a second. Passed as a
+   * function, it is only ever called from inside the fold's body, so a shut
+   * fold reads no frame at all and the capture page never competes with its
+   * own broadcast over a list nobody can see.
    */
-  const readings = $derived.by(() => {
-    if (!logOpen) return [];
+  function readings() {
     return config.keys.map((key) => {
       const seen = frame.find(([id]) => id === key.id);
       return { id: key.id, label: key.label, travel: seen?.[1] ?? 0, active: seen?.[2] === 1 };
     });
-  });
+  }
 
   let capturing = $state(false);
   let snapshot = $state<string | null>(null);
@@ -657,20 +659,27 @@
 
 <!-- Last, and shut: the rarest thing on the page. Task 27 moves it to the foot
      of the sidebar, where the mockup puts it. -->
-<Diagnostics
-  bind:open={logOpen}
-  entries={log}
-  logText={journal.asText()}
-  {readings}
-  {snapshot}
-  {capturing}
-  {probing}
-  probe={probeReading}
-  {obsProbe}
-  onCaptureRaw={() => (capturing = true)}
-  onToggleProbe={toggleProbe}
-  onTestObs={testObs}
-/>
+<Collapsible
+  id="diagnostics"
+  title="Journal"
+  note={toReport > 0 ? `${log.length} · ${toReport} to report` : String(log.length)}
+  warn={toReport > 0}
+  {storage}
+>
+  <Diagnostics
+    entries={log}
+    logText={() => journal.asText()}
+    {readings}
+    {snapshot}
+    {capturing}
+    {probing}
+    probe={probeReading}
+    {obsProbe}
+    onCaptureRaw={() => (capturing = true)}
+    onToggleProbe={toggleProbe}
+    onTestObs={testObs}
+  />
+</Collapsible>
 
 <style>
   main {

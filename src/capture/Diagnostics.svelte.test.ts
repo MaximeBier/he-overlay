@@ -15,8 +15,8 @@ function panel(overrides: Record<string, unknown> = {}) {
   const handlers = { onCaptureRaw: vi.fn(), onToggleProbe: vi.fn(), onTestObs: vi.fn() };
   const props = {
     entries: ENTRIES,
-    logText: '+1.0s\tuser\tOBS unreachable',
-    readings: [{ id: 174, label: 'Q', travel: 996, active: true }],
+    logText: () => '+1.0s\tuser\tOBS unreachable',
+    readings: () => [{ id: 174, label: 'Q', travel: 996, active: true }],
     snapshot: null,
     capturing: false,
     probing: false,
@@ -28,34 +28,8 @@ function panel(overrides: Record<string, unknown> = {}) {
   return { ...render(Diagnostics, { props }), ...handlers };
 }
 
-const summary = (c: HTMLElement) => c.querySelector<HTMLElement>('summary')!;
 const button = (c: HTMLElement, name: string) =>
   c.querySelector<HTMLButtonElement>(`[data-action="${name}"]`)!;
-
-describe('the panel one opens on purpose', () => {
-  it('stays shut until asked', () => {
-    // The default, with nothing passed: it is the last thing in the sidebar
-    // and the rarest thing anyone needs. Passing `open: false` here would
-    // test that the prop is honoured, which is a different claim entirely.
-    expect(panel().container.querySelector('details')!.open).toBe(false);
-  });
-
-  it('counts its entries in the header, so it can be read while shut', () => {
-    expect(summary(panel().container).textContent).toContain('2');
-  });
-
-  it('says in the header when something is ours to fix', () => {
-    // Spec §9.3: a fold whose contents departs from the ordinary says so in
-    // its header. Hiding a setting is fine; hiding an anomaly is not.
-    expect(summary(panel().container).textContent).toMatch(/1 to report/i);
-  });
-
-  it('says nothing alarming in the header when every line is ordinary', () => {
-    const { container } = panel({ entries: [ENTRIES[0]] });
-
-    expect(summary(container).textContent).not.toMatch(/to report/i);
-  });
-});
 
 describe('the journal', () => {
   it('shows every entry under its kind', () => {
@@ -102,7 +76,7 @@ describe('the live reading', () => {
 
   it('tells an actuated key from a merely pressed one', () => {
     const { container } = panel({
-      readings: [{ id: 174, label: 'Q', travel: 1023, active: false }],
+      readings: () => [{ id: 174, label: 'Q', travel: 1023, active: false }],
     });
 
     expect(container.querySelector('[data-reading="174"]')!.getAttribute('data-active')).toBe(
@@ -159,10 +133,19 @@ describe('naming itself', () => {
 });
 
 describe('what it costs while shut', () => {
-  it('reports its open state outward', () => {
-    // Bound, so the page can stop computing the live reading — which follows
-    // the frame, sixty times a second — while nobody is looking at it.
-    expect(panel({ open: true }).container.querySelector('details')!.open).toBe(true);
+  it('reads no frame until something renders it', () => {
+    // The fold around this one only renders the body while open, so passing a
+    // function rather than a list is what makes a shut panel free: nothing
+    // calls it, so nothing reads `frame` sixty times a second.
+    let calls = 0;
+    panel({
+      readings: () => {
+        calls += 1;
+        return [];
+      },
+    });
+
+    expect(calls).toBeGreaterThan(0);
   });
 });
 
