@@ -3,20 +3,21 @@
   import { createKeyboardLink, type KeyboardStatus } from '../keyboard/device';
   import {
     createObsClient,
+    DEFAULT_OBS_PORT,
     MAX_PORT,
     normalizePort,
     type ObsClient,
     type ObsStatus,
   } from '../transport/obs';
   import { createCaptureSession } from './session';
-  import { loadSettings, saveSettings, overlayUrl, browserStorage } from './settings';
+  import { loadSettings, saveSettings, overlayUrl, browserStorage, keyboardHint } from './settings';
   import { createOverlayRegistry } from './overlays';
   import { createConfigBroadcaster } from './broadcast';
   import { addLearnedKey, pickLearned, removeKey, removeKeys } from './learn';
   import { loadLayoutMap, resolveLayout, type LayoutMapLike } from '../keyboard/labels';
   import { setLayoutOverride } from '../config/edit';
   import { createAxisSuggester } from './suggest';
-  import { resolve } from '../config/resolve';
+  import { hasOverrides, resolve } from '../config/resolve';
   import { recommendedSize } from '../view/scene';
   import KeyLearner from './KeyLearner.svelte';
   import LayoutEditor from './LayoutEditor.svelte';
@@ -27,6 +28,7 @@
   import Wizard from './Wizard.svelte';
   import Diagnostics from './Diagnostics.svelte';
   import Collapsible from './Collapsible.svelte';
+  import Gated from './Gated.svelte';
   import { createJournal, describeAnomaly, hexDump, type JournalEntry } from './journal';
   import { createStreamProbe, type StreamReading } from './probe';
   import {
@@ -391,6 +393,28 @@
     toast = { tone: 'success', message: `Profile “${gone}” deleted` };
   }
 
+  /**
+   * What the gate over "Add key" offers to press.
+   *
+   * Without permission the missing thing is a *click* — WebHID has nothing to
+   * hang its prompt on until one arrives — so the gate has to offer one. This
+   * is the only place left doing so once the setup wizard is gone for good,
+   * and dropping it in the task 27 rewrite left the page with no way at all to
+   * grant access. On an unsupported browser nothing is offered: a button that
+   * cannot help is how someone presses it four times.
+   */
+  const keyboardAction = $derived(
+    keyboardStatus === 'no-permission' ? 'Allow keyboard' : 'Rescan devices',
+  );
+
+  let urlCopied = $state(false);
+
+  async function copyUrl() {
+    await navigator.clipboard?.writeText(url);
+    urlCopied = true;
+    note('user', 'Overlay URL copied.');
+  }
+
   function downloadProfile() {
     const blob = new Blob([exportConfig(config)], { type: 'application/json' });
     const href = URL.createObjectURL(blob);
@@ -510,213 +534,278 @@
   obs.connect();
 </script>
 
-<div class="top">
-  <StatusBar keyboard={keyboardStatus} obs={obsStatus} {rate} overlays={overlayCount} />
-  {#if canResume}
-    <button class="resume" onclick={() => remember('open')}>
-      <span class="dot" aria-hidden="true"></span>
-      Resume setup · {stepNumber(step)}/3
-    </button>
-  {/if}
+<!--
+  The three zones of mockup board `6d`: a 50 px header, the stage, and a 300 px
+  panel. Nothing here is a pile of collapsibles any more — the folds live in the
+  panel's footer, where §9.3 still governs them.
+-->
+<div class="app">
+  <header class="bar">
+    <StatusBar keyboard={keyboardStatus} obs={obsStatus} {rate} overlays={overlayCount} />
 
-  <ProfileBar
-    names={profileNames}
-    active={profile}
-    keyCount={(name) => profiles.keyCount(name)}
-    {status}
-    {statusWarn}
-    onSelect={switchProfile}
-    onCreate={createProfile}
-    onDuplicate={duplicateProfile}
-    onRename={renameProfile}
-    onRemove={removeProfile}
-    onExport={downloadProfile}
-    onImport={importProfile}
-  />
+    {#if canResume}
+      <!-- Amber, and in the header: findable long after the card was put
+           aside, from any screen (board 6f). -->
+      <button class="resume" onclick={() => remember('open')}>
+        <span class="dot" aria-hidden="true"></span>
+        Resume setup · {stepNumber(step)}/3
+      </button>
+    {/if}
+
+    <ProfileBar
+      names={profileNames}
+      active={profile}
+      keyCount={(name) => profiles.keyCount(name)}
+      {status}
+      {statusWarn}
+      onSelect={switchProfile}
+      onCreate={createProfile}
+      onDuplicate={duplicateProfile}
+      onRename={renameProfile}
+      onRemove={removeProfile}
+      onExport={downloadProfile}
+      onImport={importProfile}
+    />
+  </header>
+
+  <div class="split">
+    <main class="stage">
+      {#if wizardOpen}
+        <!-- On the stage, not beside it: the setup is an orchestration of the
+             editor, not a second interface (spec §9.1). -->
+        <div class="setup" class:banner={step === 'keys'}>
+          <Wizard
+            {step}
+            keyboard={keyboardStatus}
+            device={keyboardName}
+            {settings}
+            {url}
+            bind:learning
+            added={lastKey}
+            onAllowKeyboard={() => link.requestPermission()}
+            onReconnect={reconnect}
+            onSkip={() => remember('skipped')}
+          />
+        </div>
+      {/if}
+
+      <!-- The same component OBS renders, from the same resolved shape — with
+           the editor decorations on, which the broadcast never gets. -->
+      <LayoutEditor
+        {config}
+        {frame}
+        bind:selectedIds
+        onChange={updateConfig}
+        layout={activeLayout}
+        suggestAxis={selectedIds.length === 1 && suggestedIds.includes(selectedIds[0]!)}
+        onDismissSuggestion={() => {
+          // Proposing a mode for a heterogeneous group would mean nothing, so
+          // the suggestion is single-selection only — and so is dismissing it.
+          suggester.dismiss(selectedIds[0]!);
+          observed += 1;
+        }}
+      />
+    </main>
+
+    <aside class="panel">
+      <section class="block">
+        <Gated
+          available={keyboardStatus === 'connected'}
+          reason={keyboardHint(keyboardStatus)}
+          action={keyboardStatus === 'unsupported' ? null : keyboardAction}
+          onAction={() => link.requestPermission()}
+        >
+          <KeyLearner bind:learning onCancel={() => (learning = false)} />
+        </Gated>
+      </section>
+
+      <!-- Before the style panel, as the lot of 2026-08-21 has it: while
+           nothing works yet, the overlay URL is what one comes here for. -->
+      <section class="block">
+        <h2>OBS browser source</h2>
+
+        <Gated available={obsStatus === 'identified'} reason="Available once OBS is connected">
+          <div class="url">
+            <input readonly value={url} aria-label="Overlay URL for OBS" />
+            <button class="link" onclick={copyUrl}>{urlCopied ? 'Copied' : 'Copy'}</button>
+          </div>
+
+          {#if config.keys.length > 0}
+            <p class="figure">
+              <span>Recommended source size</span>
+              <span class="value">{size.width} × {size.height} px</span>
+            </p>
+          {/if}
+
+          <p class="state">
+            <span class="dot" data-live={overlayCount > 0} aria-hidden="true"></span>
+            {overlayCount > 0
+              ? 'Overlay connected · receiving frames'
+              : 'No overlay has reported in yet'}
+          </p>
+        </Gated>
+
+        <!-- Not in the mockup, which shows only the URL here and leaves the two
+             fields to the wizard. They have to stay reachable once the setup is
+             done: folded, and flagged when they hold anything unusual. -->
+        <Collapsible
+          id="obs-credentials"
+          title="Server port and password"
+          modified={settings.port !== DEFAULT_OBS_PORT || settings.password !== ''}
+          {storage}
+        >
+          <label class="field">
+            Port
+            <input
+              type="number"
+              min="1"
+              max={MAX_PORT}
+              bind:value={settings.port}
+              onchange={reconnect}
+            />
+          </label>
+          <label class="field">
+            Password
+            <input type="password" bind:value={settings.password} onchange={reconnect} />
+          </label>
+          <p class="fine">
+            Stored in this browser and carried in the URL above. Anyone with access to this machine
+            can read it.
+          </p>
+        </Collapsible>
+      </section>
+
+      <!-- Global appearance. Per-key overrides live in the popover the editor
+           anchors to the selection, never here (spec §16.4). -->
+      <section class="block">
+        <StylePanel {config} onChange={updateConfig} />
+      </section>
+
+      <section class="block">
+        <h2>Keys · {config.keys.length}</h2>
+        {#if config.keys.length === 0}
+          <p class="fine">No keys yet.</p>
+        {:else}
+          <ul class="keys">
+            {#each config.keys as key (key.id)}
+              <li class:selected={selectedIds.includes(key.id)}>
+                <span class="label">{key.label}</span>
+                <span class="mode">{key.mode}</span>
+                {#if hasOverrides(key)}<span class="override">override</span>{/if}
+                <button
+                  class="trash"
+                  aria-label={'Delete ' + key.label}
+                  onclick={() => updateConfig(removeKey(config, key.id))}
+                >
+                  🗑
+                </button>
+              </li>
+            {/each}
+          </ul>
+
+          {#if selectedIds.length > 1}
+            <button
+              class="link"
+              onclick={() => {
+                updateConfig(removeKeys(config, selectedIds));
+                selectedIds = [];
+              }}
+            >
+              Delete {selectedIds.length} selected keys
+            </button>
+          {/if}
+        {/if}
+      </section>
+
+      <footer class="foot">
+        <!-- Deliberately last and discreet: an edge case that matters only when
+             detection got it wrong (spec §16.4, §8.6). -->
+        <Collapsible
+          id="layout"
+          title="Keyboard layout"
+          note={config.layoutOverride === 'auto' ? 'Auto' : config.layoutOverride.toUpperCase()}
+          modified={config.layoutOverride !== 'auto'}
+          {storage}
+        >
+          <select
+            aria-label="Keyboard layout"
+            value={config.layoutOverride}
+            onchange={(event) =>
+              updateConfig(
+                setLayoutOverride(
+                  config,
+                  event.currentTarget.value as OverlayConfig['layoutOverride'],
+                  layout,
+                ),
+              )}
+          >
+            <option value="auto">Auto — detected</option>
+            <option value="azerty">AZERTY</option>
+            <option value="qwerty">QWERTY</option>
+            <option value="qwertz">QWERTZ</option>
+          </select>
+          <p class="fine">Only affects displayed labels · capture is layout-independent.</p>
+        </Collapsible>
+
+        <Collapsible
+          id="diagnostics"
+          title="Journal"
+          note={toReport > 0 ? log.length + ' · ' + toReport + ' to report' : String(log.length)}
+          warn={toReport > 0}
+          {storage}
+        >
+          <Diagnostics
+            entries={log}
+            logText={() => journal.asText()}
+            {readings}
+            {snapshot}
+            {capturing}
+            {probing}
+            probe={probeReading}
+            {obsProbe}
+            onCaptureRaw={() => (capturing = true)}
+            onToggleProbe={toggleProbe}
+            onTestObs={testObs}
+          />
+        </Collapsible>
+      </footer>
+    </aside>
+  </div>
 </div>
 
 <Toast notice={toast} onDismiss={() => (toast = null)} />
 
-<main>
-  <h1>HE Overlay — Capture</h1>
-
-  {#if wizardOpen}
-    <Wizard
-      {step}
-      keyboard={keyboardStatus}
-      device={keyboardName}
-      {settings}
-      {url}
-      bind:learning
-      added={lastKey}
-      onAllowKeyboard={() => link.requestPermission()}
-      onReconnect={reconnect}
-      onSkip={() => remember('skipped')}
-    />
-  {/if}
-
-  <button onclick={() => link.requestPermission()}>Allow keyboard</button>
-
-  <label>
-    OBS port
-    <input type="number" min="1" max={MAX_PORT} bind:value={settings.port} onchange={reconnect} />
-  </label>
-  <label>
-    OBS password
-    <input type="password" bind:value={settings.password} onchange={reconnect} />
-  </label>
-  <p class="warning">
-    The password is stored in this browser and travels in the overlay URL below. Anyone with access
-    to this machine can read it.
-  </p>
-
-  <label>
-    Overlay URL for OBS
-    <input readonly value={url} />
-  </label>
-
-  {#if config.keys.length > 0}
-    <p class="quiet">
-      Recommended source size: <code>{size.width} × {size.height}</code> — the overlay pulls the keys
-      into the top-left corner, so this is smaller than the editor stage.
-    </p>
-  {/if}
-
-  <div class="row">
-    <KeyLearner bind:learning onCancel={() => (learning = false)} />
-  </div>
-
-  <!-- The same component OBS renders, from the same resolved shape — with the
-       editor decorations on, which the broadcast never gets. -->
-  <LayoutEditor
-    {config}
-    {frame}
-    bind:selectedIds
-    onChange={updateConfig}
-    layout={activeLayout}
-    suggestAxis={selectedIds.length === 1 && suggestedIds.includes(selectedIds[0]!)}
-    onDismissSuggestion={() => {
-      // Proposing a mode for a heterogeneous group would mean nothing, so the
-      // suggestion is single-selection only — and so is dismissing it.
-      suggester.dismiss(selectedIds[0]!);
-      observed += 1;
-    }}
-  />
-
-  <!-- Global appearance. Per-key overrides live in the popover the editor
-       anchors to the selection, never here (spec §16.4). -->
-  <StylePanel {config} onChange={updateConfig} />
-
-  <!-- Deliberately discreet, and placed last: an edge case that matters only
-       when detection got it wrong (spec §16.4, §8.6). Changing it relabels the
-       keys already added — that is what it is for. -->
-  <label class="quiet">
-    Keyboard layout
-    <select
-      value={config.layoutOverride}
-      onchange={(event) =>
-        updateConfig(
-          setLayoutOverride(
-            config,
-            event.currentTarget.value as OverlayConfig['layoutOverride'],
-            layout,
-          ),
-        )}
-    >
-      <option value="auto">Auto — detected</option>
-      <option value="azerty">AZERTY</option>
-      <option value="qwerty">QWERTY</option>
-      <option value="qwertz">QWERTZ</option>
-    </select>
-  </label>
-
-  {#if config.keys.length > 0}
-    <ul class="keys">
-      {#each config.keys as key (key.id)}
-        <li>
-          <span class="label">{key.label}</span>
-          <span class="index">index {key.id}</span>
-          <button onclick={() => updateConfig(removeKey(config, key.id))}>Remove</button>
-        </li>
-      {/each}
-    </ul>
-
-    {#if selectedIds.length > 1}
-      <!-- Under the list, not in the editor: the popover already deletes the
-           selection, and a second button on the stage would sit next to it
-           saying the same thing (spec §16.4). -->
-      <button
-        onclick={() => {
-          updateConfig(removeKeys(config, selectedIds));
-          selectedIds = [];
-        }}
-      >
-        Delete {selectedIds.length} selected keys
-      </button>
-    {/if}
-  {/if}
-</main>
-
-<!-- Last, and shut: the rarest thing on the page. Task 27 moves it to the foot
-     of the sidebar, where the mockup puts it. -->
-<Collapsible
-  id="diagnostics"
-  title="Journal"
-  note={toReport > 0 ? `${log.length} · ${toReport} to report` : String(log.length)}
-  warn={toReport > 0}
-  {storage}
->
-  <Diagnostics
-    entries={log}
-    logText={() => journal.asText()}
-    {readings}
-    {snapshot}
-    {capturing}
-    {probing}
-    probe={probeReading}
-    {obsProbe}
-    onCaptureRaw={() => (capturing = true)}
-    onToggleProbe={toggleProbe}
-    onTestObs={testObs}
-  />
-</Collapsible>
-
 <style>
-  main {
-    font: var(--he-font, 400 14px system-ui, sans-serif);
-    padding: 0.75rem;
-    display: grid;
-    gap: 0.5rem;
-    justify-items: start;
-  }
-  .warning {
-    color: var(--he-override);
-    margin: 0;
-  }
-  .row {
+  .app {
     display: flex;
-    gap: var(--he-space, 0.5rem);
-    align-items: center;
-    flex-wrap: wrap;
+    flex-direction: column;
+    block-size: 100vh;
+    font: var(--he-font, 400 17px system-ui, sans-serif);
+    color: var(--he-text, #dde1e9);
+    background: var(--he-bg, #0e1015);
   }
-  .top {
+
+  .bar {
+    flex: none;
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    padding-right: 0.75rem;
-    background: var(--he-surface);
+    gap: 22px;
+    block-size: var(--he-header-height, 50px);
+    padding: 0 22px;
+    border-block-end: 1px solid var(--he-border, #1b1e27);
   }
-  .top :global(header) {
+  .bar :global(header) {
+    /* StatusBar brings its own header element; here it is a run of pills. */
     flex: 1;
+    background: none;
+    padding: 0;
   }
-  /* Amber, and in the header: it has to be findable long after the card was
-     put aside, from any screen (board 6f). */
   .resume {
     display: inline-flex;
     align-items: center;
     gap: 7px;
     font: inherit;
-    font-size: 12px;
+    font-size: var(--he-size-md, 17px);
     font-weight: 600;
     color: var(--he-override, #d9a05b);
     background: none;
@@ -731,34 +820,223 @@
     border-radius: 50%;
     background: var(--he-override, #d9a05b);
   }
+
+  .split {
+    flex: 1;
+    display: flex;
+    min-block-size: 0;
+  }
+
+  .stage {
+    flex: 1;
+    position: relative;
+    min-inline-size: 0;
+    background: var(--he-stage, #0b0d11);
+  }
+  /* Over the editor, because the setup is walking someone through it. The
+     third step is a banner at the top instead: a card in the middle would
+     cover the very keys it is asking for (board 6c). */
+  .setup {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* The wrapper spans the stage so the card can be centred in it; without
+       this it would also swallow every click meant for the keys underneath. */
+    pointer-events: none;
+  }
+  .setup > :global(*) {
+    pointer-events: auto;
+  }
+  /* The third step is a banner at the top: a card in the middle would cover
+     the very keys the step is asking for (board 6c). */
+  .setup.banner {
+    align-items: start;
+    padding-block-start: 52px;
+  }
+
+  .panel {
+    flex: none;
+    inline-size: var(--he-panel-width, 300px);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    border-inline-start: 1px solid var(--he-border, #1b1e27);
+  }
+  .block {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    padding: 16px 18px;
+    border-block-end: 1px solid var(--he-border, #1b1e27);
+  }
+  .foot {
+    margin-block-start: auto;
+    display: flex;
+    flex-direction: column;
+    padding: 11px 18px;
+    border-block-start: 1px solid var(--he-border, #1b1e27);
+    background: var(--he-stage, #0b0d11);
+  }
+
+  h2 {
+    margin: 0;
+    font-size: var(--he-size-sm, 15.5px);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--he-text-muted, #8b90a0);
+  }
+
+  .url {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 9px;
+    background: var(--he-stage, #0b0d11);
+    border: 1px solid var(--he-border-control, #232838);
+    border-radius: var(--he-radius, 4px);
+  }
+  .url input {
+    flex: 1;
+    min-inline-size: 0;
+    border: none;
+    background: none;
+    padding: 0;
+    font: var(--he-font-mono, 400 15px ui-monospace, monospace);
+    font-size: var(--he-size-xs, 14px);
+    color: var(--he-text-faint, #5a5f70);
+    text-overflow: ellipsis;
+  }
+  .link {
+    all: unset;
+    cursor: pointer;
+    font-size: var(--he-size-sm, 15.5px);
+    font-weight: 600;
+    color: var(--he-accent, #7c9eff);
+  }
+  .link:hover {
+    color: var(--he-accent-hover, #a5bcff);
+  }
+  .link:focus-visible {
+    outline: 2px solid var(--he-accent, #7c9eff);
+    outline-offset: 2px;
+  }
+
+  .figure,
+  .state,
+  .fine {
+    margin: 0;
+    font-size: var(--he-size-xs, 14px);
+    color: var(--he-text-faint, #5a5f70);
+    line-height: 1.45;
+  }
+  .figure {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 9px;
+    background: var(--he-surface, #151823);
+    border-radius: var(--he-radius, 4px);
+  }
+  .figure .value {
+    font: var(--he-font-mono, 400 15px ui-monospace, monospace);
+    font-size: var(--he-size-xs, 14px);
+    color: var(--he-text, #dde1e9);
+  }
+  .state {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .state .dot {
+    inline-size: 6px;
+    block-size: 6px;
+    border-radius: 50%;
+    background: var(--he-border-hover, #3a4054);
+  }
+  .state .dot[data-live='true'] {
+    background: var(--he-ok, #4caf7d);
+  }
+
+  .field {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: var(--he-size-sm, 15.5px);
+    color: var(--he-text-muted, #8b90a0);
+    padding-block: 3px;
+  }
+  .field input {
+    inline-size: 8rem;
+    font: var(--he-font-mono, 400 15px ui-monospace, monospace);
+    font-size: var(--he-size-sm, 15.5px);
+    color: var(--he-text, #dde1e9);
+    background: var(--he-stage, #0b0d11);
+    border: 1px solid var(--he-border-control, #232838);
+    border-radius: var(--he-radius, 4px);
+    padding: 4px 7px;
+  }
+
   .keys {
     list-style: none;
     margin: 0;
     padding: 0;
-    display: grid;
-    gap: 0.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
   .keys li {
     display: flex;
-    gap: var(--he-space, 0.5rem);
     align-items: center;
+    gap: 8px;
+    padding: 5px 9px;
+    border-radius: var(--he-radius, 4px);
+    font-size: var(--he-size-md, 17px);
+  }
+  .keys li:hover {
+    background: var(--he-surface, #151823);
+  }
+  .keys li.selected {
+    background: var(--he-surface, #151823);
   }
   .label {
-    min-width: 4rem;
-    font-weight: 700;
+    font-weight: 600;
+    min-inline-size: 2.5rem;
   }
-  .quiet {
-    display: flex;
-    gap: var(--he-space, 0.5rem);
-    align-items: center;
-    font-size: 12px;
-    color: var(--he-text-muted, #8b90a0);
+  .mode {
+    font-size: var(--he-size-xs, 14px);
+    color: var(--he-text-faint, #5a5f70);
   }
-  .index {
-    color: var(--he-text-muted, #8b90a0);
+  .override {
+    font-size: var(--he-size-xs, 14px);
+    color: var(--he-override, #d9a05b);
   }
-  input[readonly] {
-    min-width: 32rem;
-    max-width: 100%;
+  .trash {
+    all: unset;
+    margin-left: auto;
+    cursor: pointer;
+    font-size: var(--he-size-sm, 15.5px);
+    opacity: 0;
+  }
+  .keys li:hover .trash,
+  .trash:focus-visible {
+    opacity: 1;
+  }
+  .trash:focus-visible {
+    outline: 2px solid var(--he-accent, #7c9eff);
+    outline-offset: 2px;
+  }
+
+  select {
+    font: inherit;
+    font-size: var(--he-size-md, 17px);
+    color: var(--he-text, #dde1e9);
+    background: var(--he-stage, #0b0d11);
+    border: 1px solid var(--he-border-control, #232838);
+    border-radius: var(--he-radius, 4px);
+    padding: 4px 6px;
   }
 </style>

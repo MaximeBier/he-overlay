@@ -303,12 +303,12 @@
     gap: 8px;
   }
   .title {
-    font-size: 12.5px;
+    font-size: var(--he-size-md, 17px);
     font-weight: 600;
     color: var(--he-text, #dde1e9);
   }
   .badge {
-    font-size: 10px;
+    font-size: var(--he-size-xs, 14px);
     letter-spacing: 0.04em;
     text-transform: uppercase;
     color: var(--he-override, #d9a05b);
@@ -324,7 +324,7 @@
   }
   label,
   .label {
-    font-size: 12px;
+    font-size: var(--he-size-md, 17px);
     color: var(--he-text-muted, #8b90a0);
   }
   .value {
@@ -341,7 +341,7 @@
   .segmented button {
     flex: 1;
     font: inherit;
-    font-size: 12px;
+    font-size: var(--he-size-md, 17px);
     color: var(--he-text-muted, #8b90a0);
     background: none;
     border: 0;
@@ -362,7 +362,7 @@
     margin: 0;
     display: grid;
     gap: 6px;
-    font-size: 11.5px;
+    font-size: var(--he-size-sm, 15.5px);
     line-height: 1.4;
     color: var(--he-text-muted, #8b90a0);
     background: var(--he-surface, #151823);
@@ -379,7 +379,7 @@
      sentence. Same mono face as the field it puts the value back into, one
      row above, so the two are visibly the same kind of thing. */
   [data-reset='label'] code {
-    font: var(--he-font-mono, 400 12px ui-monospace, monospace);
+    font: var(--he-font-mono, 400 15px ui-monospace, monospace);
     color: var(--he-text, #dde1e9);
     background: var(--he-stage, #0b0d11);
     border: 1px solid var(--he-border-control, #232838);
@@ -398,7 +398,7 @@
   }
   .link {
     font: inherit;
-    font-size: 11px;
+    font-size: var(--he-size-sm, 15.5px);
     color: var(--he-accent, #7c9eff);
     background: none;
     border: 0;
@@ -410,7 +410,7 @@
   }
   .danger {
     font: inherit;
-    font-size: 12px;
+    font-size: var(--he-size-md, 17px);
     color: var(--he-danger, #e06c5b);
     background: none;
     border: 1px solid #3a2226;
@@ -419,7 +419,7 @@
     cursor: pointer;
   }
   .times {
-    font-size: 11px;
+    font-size: var(--he-size-sm, 15.5px);
     color: var(--he-text-ghost, #4a4f60);
   }
   input[type='color'] {
@@ -434,7 +434,7 @@
   input[type='text'],
   input[type='number'] {
     inline-size: 56px;
-    font: var(--he-font-mono, 400 12px ui-monospace, monospace);
+    font: var(--he-font-mono, 400 15px ui-monospace, monospace);
     color: var(--he-text, #dde1e9);
     background: var(--he-stage, #0b0d11);
     border: 1px solid var(--he-border-control, #232838);

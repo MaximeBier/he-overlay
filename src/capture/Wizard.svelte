@@ -206,26 +206,26 @@
     gap: 16px;
     padding: 26px;
 
-    font: var(--he-font, 400 14px system-ui, sans-serif);
+    font: var(--he-font, 400 17px system-ui, sans-serif);
     color: var(--he-text, #dde1e9);
     background: var(--he-popover, #141722);
     border: 1px solid var(--he-border-popover, #262b3a);
     border-radius: var(--he-radius-panel, 6px);
   }
   .eyebrow {
-    font: var(--he-font-mono, 400 12px ui-monospace, monospace);
-    font-size: 10.5px;
+    font: var(--he-font-mono, 400 15px ui-monospace, monospace);
+    font-size: var(--he-size-xs, 14px);
     letter-spacing: 0.08em;
     color: var(--he-accent, #7c9eff);
   }
   h2 {
     margin: 0;
-    font-size: 19px;
+    font-size: 27px;
     font-weight: 700;
   }
   .lede {
     margin: 0;
-    font-size: 12.5px;
+    font-size: var(--he-size-md, 17px);
     line-height: 1.55;
     color: var(--he-text-muted, #8b90a0);
     text-wrap: pretty;
@@ -236,7 +236,7 @@
   }
   .fine {
     margin: 0;
-    font-size: 10.5px;
+    font-size: var(--he-size-xs, 14px);
     line-height: 1.45;
     color: var(--he-text-faint, #5a5f70);
     text-wrap: pretty;
@@ -251,7 +251,7 @@
     display: flex;
     flex-direction: column;
     gap: 5px;
-    font-size: 11px;
+    font-size: var(--he-size-sm, 15.5px);
     color: var(--he-text-muted, #8b90a0);
   }
   .secret {
@@ -266,7 +266,7 @@
   .secret button {
     all: unset;
     cursor: pointer;
-    font-size: 10px;
+    font-size: var(--he-size-xs, 14px);
     color: var(--he-accent, #7c9eff);
   }
   .secret button:hover {
@@ -276,8 +276,8 @@
   input {
     box-sizing: border-box;
     inline-size: 100%;
-    font: var(--he-font-mono, 400 12px ui-monospace, monospace);
-    font-size: 11px;
+    font: var(--he-font-mono, 400 15px ui-monospace, monospace);
+    font-size: var(--he-size-sm, 15.5px);
     color: var(--he-text, #dde1e9);
     background: var(--he-stage, #0b0d11);
     border: 1px solid var(--he-border-control, #232838);
@@ -313,7 +313,7 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    font-size: 12.5px;
+    font-size: var(--he-size-md, 17px);
     color: var(--he-text-faint, #5a5f70);
   }
   .bullet {
@@ -324,7 +324,7 @@
     border: 1px solid var(--he-border-popover, #262b3a);
     display: grid;
     place-items: center;
-    font-size: 10px;
+    font-size: var(--he-size-xs, 14px);
     font-weight: 700;
   }
   li[data-state='current'] {
@@ -347,7 +347,7 @@
   }
   .note {
     margin-left: auto;
-    font-size: 10px;
+    font-size: var(--he-size-xs, 14px);
     color: var(--he-override, #d9a05b);
   }
   li[data-state='done'] .note {
@@ -363,7 +363,7 @@
   .secondary {
     all: unset;
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--he-size-md, 17px);
     font-weight: 600;
     border-radius: var(--he-radius-control, 5px);
     padding: 8px 16px;
@@ -387,7 +387,7 @@
   .skip {
     all: unset;
     cursor: pointer;
-    font-size: 11px;
+    font-size: var(--he-size-sm, 15.5px);
     color: var(--he-text-faint, #5a5f70);
   }
   .skip:hover {
@@ -406,7 +406,7 @@
     align-items: center;
     gap: 13px;
     padding: 13px 18px;
-    font: var(--he-font, 400 14px system-ui, sans-serif);
+    font: var(--he-font, 400 17px system-ui, sans-serif);
     color: var(--he-text, #dde1e9);
     background: var(--he-popover, #141722);
     border: 1px solid var(--he-accent, #7c9eff);
@@ -425,11 +425,11 @@
     gap: 3px;
   }
   .lines strong {
-    font-size: 13px;
+    font-size: var(--he-size-lg, 19px);
     font-weight: 700;
   }
   .added {
-    font-size: 11.5px;
+    font-size: var(--he-size-sm, 15.5px);
     color: var(--he-ok, #4caf7d);
   }
 </style>

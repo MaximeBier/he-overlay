@@ -32,8 +32,22 @@ export const UI_TOKENS = {
   textMuted: '#8B90A0',
   textFaint: '#5A5F70',
   textGhost: '#4A4F60',
-  font: "400 14px 'Archivo', system-ui, sans-serif",
-  fontMono: "400 12px 'IBM Plex Mono', ui-monospace, monospace",
+  /**
+   * The type scale, one step per role — and the reason it exists.
+   *
+   * The mockup is drawn on an 1180 px board and its figures are absolute: 9.5
+   * to 12.5 px. Applied literally to a real window they read as too small,
+   * because the board was never the size of anybody's screen. These four steps
+   * keep the mockup's *ratios* and lift the whole thing one notch; changing
+   * them here changes the whole interface at once, which is the point of
+   * having them rather than forty literals.
+   */
+  sizeXs: '14px',
+  sizeSm: '15.5px',
+  sizeMd: '17px',
+  sizeLg: '19px',
+  font: "400 17px 'Archivo', system-ui, sans-serif",
+  fontMono: "400 15px 'IBM Plex Mono', ui-monospace, monospace",
   /**
    * Three radii, not one. The mockup gives inputs 4 px, tiles and buttons 5,
    * panels and popovers 6 — a hierarchy small enough to look accidental and

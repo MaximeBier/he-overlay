@@ -156,7 +156,7 @@
 
 <style>
   .body {
-    font: var(--he-font, 400 14px system-ui, sans-serif);
+    font: var(--he-font, 400 17px system-ui, sans-serif);
     color: var(--he-text-muted, #8b90a0);
   }
 
@@ -174,7 +174,7 @@
   }
   h3 {
     margin: 0;
-    font-size: 10px;
+    font-size: var(--he-size-xs, 14px);
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -194,8 +194,8 @@
   .readings li,
   .at,
   pre {
-    font: var(--he-font-mono, 400 12px ui-monospace, monospace);
-    font-size: 9.5px;
+    font: var(--he-font-mono, 400 15px ui-monospace, monospace);
+    font-size: var(--he-size-xs, 14px);
     color: var(--he-text-faint, #5a5f70);
     margin: 0;
   }
@@ -250,14 +250,14 @@
   .empty,
   .hint {
     margin: 0;
-    font-size: 10px;
+    font-size: var(--he-size-xs, 14px);
     line-height: 1.45;
     color: var(--he-text-faint, #5a5f70);
   }
 
   button {
     font: inherit;
-    font-size: 11px;
+    font-size: var(--he-size-sm, 15.5px);
     font-weight: 600;
     color: var(--he-accent, #7c9eff);
     background: none;

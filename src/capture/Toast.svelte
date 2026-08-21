@@ -64,8 +64,8 @@
     gap: 10px;
     padding: 10px 14px;
 
-    font: var(--he-font, 400 14px system-ui, sans-serif);
-    font-size: 12px;
+    font: var(--he-font, 400 17px system-ui, sans-serif);
+    font-size: var(--he-size-md, 17px);
     color: var(--he-text, #dde1e9);
     background: var(--he-popover, #141722);
     border: 1px solid var(--he-border, #1b1e27);

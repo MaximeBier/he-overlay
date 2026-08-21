@@ -284,8 +284,8 @@
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    font: var(--he-font, 400 14px system-ui, sans-serif);
-    font-size: 12px;
+    font: var(--he-font, 400 17px system-ui, sans-serif);
+    font-size: var(--he-size-md, 17px);
     color: var(--he-text-muted, #8b90a0);
   }
   .trigger {
@@ -299,7 +299,7 @@
     border-radius: var(--he-radius, 4px);
   }
   .caret {
-    font-size: 10px;
+    font-size: var(--he-size-xs, 14px);
     color: var(--he-text-muted, #8b90a0);
   }
 
@@ -332,7 +332,7 @@
     gap: 8px;
     padding: 7px 9px;
     border-radius: var(--he-radius, 4px);
-    font-size: 12px;
+    font-size: var(--he-size-md, 17px);
     color: var(--he-text-muted, #8b90a0);
   }
   .row:hover,
@@ -363,7 +363,7 @@
   }
   .count {
     flex: none;
-    font-size: 10px;
+    font-size: var(--he-size-xs, 14px);
     color: var(--he-text-faint, #5a5f70);
   }
 
@@ -382,7 +382,7 @@
     inline-size: 100%;
     box-sizing: border-box;
     font: inherit;
-    font-size: 12px;
+    font-size: var(--he-size-md, 17px);
     color: var(--he-text, #dde1e9);
     background: var(--he-stage, #0b0d11);
     border: 1px solid var(--he-border-control, #232838);
@@ -408,7 +408,7 @@
 
   .status {
     padding: 3px 9px 4px;
-    font-size: 10px;
+    font-size: var(--he-size-xs, 14px);
     line-height: 1.4;
     color: var(--he-text-faint, #5a5f70);
   }

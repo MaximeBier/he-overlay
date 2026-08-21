@@ -172,7 +172,7 @@
   }
   h2 {
     margin: 0;
-    font-size: 11px;
+    font-size: var(--he-size-sm, 15.5px);
     font-weight: 600;
     letter-spacing: 0.05em;
     text-transform: uppercase;
@@ -185,7 +185,7 @@
     gap: 12px;
   }
   label {
-    font-size: 12px;
+    font-size: var(--he-size-md, 17px);
     color: var(--he-text-muted, #8b90a0);
   }
   .value {
@@ -194,11 +194,11 @@
     gap: 8px;
   }
   code {
-    font: var(--he-font-mono, 400 12px ui-monospace, monospace);
+    font: var(--he-font-mono, 400 15px ui-monospace, monospace);
     color: var(--he-text-faint, #5a5f70);
   }
   .unit {
-    font-size: 10px;
+    font-size: var(--he-size-xs, 14px);
     color: var(--he-text-ghost, #4a4f60);
   }
   input[type='color'] {
@@ -215,7 +215,7 @@
   }
   input[type='number'] {
     inline-size: 56px;
-    font: var(--he-font-mono, 400 12px ui-monospace, monospace);
+    font: var(--he-font-mono, 400 15px ui-monospace, monospace);
     color: var(--he-text, #dde1e9);
     background: var(--he-stage, #0b0d11);
     border: 1px solid var(--he-border-control, #232838);
@@ -228,7 +228,7 @@
   }
   select {
     font: inherit;
-    font-size: 12px;
+    font-size: var(--he-size-md, 17px);
     color: var(--he-text, #dde1e9);
     background: var(--he-stage, #0b0d11);
     border: 1px solid var(--he-border-control, #232838);

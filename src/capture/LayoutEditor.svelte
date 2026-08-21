@@ -392,10 +392,19 @@
 </div>
 
 <style>
+  /**
+   * A column that fills whatever it is given: the stage takes the room, the
+   * shortcut bar sits at the bottom of the page.
+   *
+   * The stage used to be as big as the keys were, which made the empty space
+   * around them belong to nobody — a lasso could not start there, and a click
+   * meant to clear the selection landed outside the editor entirely.
+   */
   .editor {
-    display: grid;
-    gap: var(--he-space, 0.5rem);
-    justify-items: start;
+    display: flex;
+    flex-direction: column;
+    block-size: 100%;
+    min-block-size: 0;
   }
   /* Drawn over the keys and under nothing that is clickable: the marquee is
      feedback, and the pointer must keep reaching the stage beneath it. */
@@ -407,10 +416,10 @@
     border-radius: var(--he-radius, 4px);
   }
   .stage {
+    flex: 1;
     position: relative;
+    overflow: auto;
     background: var(--he-stage, #0b0d11);
-    border-radius: var(--he-radius, 4px);
-    min-height: 4rem;
     /* A drag across the keys used to select the SVG labels as if they were a
        paragraph, leaving a blue smear over the layout. Nothing here is text
        anyone means to copy. */
@@ -480,8 +489,11 @@
     z-index: 1;
   }
   .shortcuts {
+    flex: none;
     margin: 0;
-    font: var(--he-font-mono, 400 12px ui-monospace, monospace);
-    color: var(--he-text-muted, #8b90a0);
+    padding: 9px 18px;
+    text-align: center;
+    font-size: var(--he-size-xs, 14px);
+    color: var(--he-text-faint, #5a5f70);
   }
 </style>

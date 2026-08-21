@@ -77,7 +77,7 @@
 
 <style>
   .fold {
-    font: var(--he-font, 400 14px system-ui, sans-serif);
+    font: var(--he-font, 400 17px system-ui, sans-serif);
     color: var(--he-text-muted, #8b90a0);
   }
   summary {
@@ -86,7 +86,7 @@
     gap: 8px;
     padding: 6px 0;
     cursor: pointer;
-    font-size: 11px;
+    font-size: var(--he-size-sm, 15.5px);
     font-weight: 600;
     letter-spacing: 0.04em;
   }
@@ -106,7 +106,7 @@
   .note {
     margin-left: auto;
     font-weight: 400;
-    font-size: 10px;
+    font-size: var(--he-size-xs, 14px);
     color: var(--he-text-faint, #5a5f70);
   }
   .note[data-warn='true'] {
