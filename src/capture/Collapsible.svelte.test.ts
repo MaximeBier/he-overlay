@@ -71,11 +71,11 @@ describe('what the header says while shut', () => {
     ).not.toBeNull();
   });
 
-  it('carries a count or a warning without being opened', () => {
-    const { container } = fold({ note: '2 to report', warn: true });
+  it('carries a count without being opened, and without raising its voice', () => {
+    // Quiet on purpose. A note that catches the eye turns every fold into a
+    // standing alarm; the dot above is the only thing here allowed to insist.
+    const { container } = fold({ note: '4 · 1 to report' });
 
-    const note = summary(container).querySelector('[data-note]')!;
-    expect(note.textContent).toContain('2 to report');
-    expect(note.getAttribute('data-warn')).toBe('true');
+    expect(summary(container).querySelector('[data-note]')!.textContent).toContain('1 to report');
   });
 });

@@ -19,7 +19,6 @@
     id,
     title,
     note = null,
-    warn = false,
     modified = false,
     defaultOpen = false,
     storage,
@@ -28,10 +27,16 @@
     /** Its own key in storage. Two folds must never share one. */
     id: string;
     title: string;
-    /** A count or a state worth reading while shut — "14", "2 to report". */
+    /**
+     * A count or a state worth reading while shut — "14", "4 · 1 to report".
+     *
+     * Always quiet. A note is there to be read when someone looks, not to
+     * catch the eye: colouring the journal's count amber made the page carry a
+     * permanent alarm about entries nobody had asked to be alarmed by. The dot
+     * below is the one thing here allowed to insist, and only for a setting
+     * that was actually changed.
+     */
     note?: string | null;
-    /** Amber: the note is a fact to act on, not just a figure. */
-    warn?: boolean;
     /** §9.3: the contents departs from the defaults, and hiding that is not on. */
     modified?: boolean;
     /** The first-run guess only. A stored choice always wins over it. */
@@ -60,7 +65,7 @@
       <span class="dot" data-modified title="Customized" aria-label="Customized"></span>
     {/if}
     {#if note}
-      <span class="note" data-note data-warn={warn}>{note}</span>
+      <span class="note" data-note>{note}</span>
     {/if}
   </summary>
 
@@ -108,9 +113,6 @@
     font-weight: 400;
     font-size: var(--he-size-xs, 14px);
     color: var(--he-text-faint, #5a5f70);
-  }
-  .note[data-warn='true'] {
-    color: var(--he-override, #d9a05b);
   }
   .body {
     padding-top: 8px;

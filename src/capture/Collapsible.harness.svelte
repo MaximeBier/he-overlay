@@ -6,7 +6,6 @@
     id = 'style',
     title = 'Global style',
     note = null,
-    warn = false,
     modified = false,
     defaultOpen = false,
     storage,
@@ -14,13 +13,12 @@
     id?: string;
     title?: string;
     note?: string | null;
-    warn?: boolean;
     modified?: boolean;
     defaultOpen?: boolean;
     storage: Pick<Storage, 'getItem' | 'setItem'>;
   } = $props();
 </script>
 
-<Collapsible {id} {title} {note} {warn} {modified} {defaultOpen} {storage}>
+<Collapsible {id} {title} {note} {modified} {defaultOpen} {storage}>
   <p>the contents</p>
 </Collapsible>

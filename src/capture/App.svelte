@@ -763,7 +763,6 @@
           id="diagnostics"
           title="Journal"
           note={toReport > 0 ? log.length + ' · ' + toReport + ' to report' : String(log.length)}
-          warn={toReport > 0}
           {storage}
         >
           <Diagnostics
