@@ -22,8 +22,10 @@
     capturing,
     probing,
     probe,
+    obsProbe,
     onCaptureRaw,
     onToggleProbe,
+    onTestObs,
   }: {
     /**
      * Bound, because what is inside costs something to keep current: the live
@@ -40,8 +42,11 @@
     capturing: boolean;
     probing: boolean;
     probe: StreamReading | null;
+    /** What a throwaway connection to OBS answered, or null if never asked. */
+    obsProbe: string | null;
     onCaptureRaw: () => void;
     onToggleProbe: () => void;
+    onTestObs: () => void;
   } = $props();
 
   const toReport = $derived(entries.filter((entry) => entry.kind === 'bug').length);
@@ -138,6 +143,18 @@
             >
           </li>
         </ul>
+      {/if}
+    </section>
+
+    <section>
+      <h3>OBS connection</h3>
+      <button data-action="test-obs" type="button" onclick={onTestObs}>Test OBS connection</button>
+      <p class="hint">
+        Opens a second, temporary connection with the port and password as typed. OBS will show two
+        clients for a moment; nothing is sent through it.
+      </p>
+      {#if obsProbe}
+        <p class="at" data-obs-probe>{obsProbe}</p>
       {/if}
     </section>
 

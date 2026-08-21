@@ -180,6 +180,37 @@
     note('user', probing ? 'Background probe started.' : 'Background probe stopped.');
   }
 
+  /**
+   * A throwaway connection, opened to answer one question: are the port and
+   * password as typed good, *now*?
+   *
+   * Separate from the live client on purpose. That one carries a reconnection
+   * backoff, so after a few failures it answers "not yet" rather than "no" —
+   * which is the wrong answer to someone who has just retyped a password.
+   */
+  let obsProbe = $state<string | null>(null);
+
+  function testObs() {
+    obsProbe = 'testing…';
+
+    const probe = createObsClient({
+      url: `ws://localhost:${port}`,
+      password: settings.password,
+      onStatus: (status) => {
+        // 'connecting' is not an answer. Everything else is terminal, and the
+        // socket closes on the spot: nothing is ever sent through this one,
+        // and leaving it open would show a second client in OBS for good.
+        if (status === 'connecting') return;
+        obsProbe = status;
+        note('user', `OBS probe: ${status}.`);
+        probe.close();
+      },
+      onMessage: () => {},
+    });
+
+    probe.connect();
+  }
+
   const overlays = createOverlayRegistry();
 
   let setup = $state<WizardStatus>(loadStatus(storage));
@@ -635,8 +666,10 @@
   {capturing}
   {probing}
   probe={probeReading}
+  {obsProbe}
   onCaptureRaw={() => (capturing = true)}
   onToggleProbe={toggleProbe}
+  onTestObs={testObs}
 />
 
 <style>

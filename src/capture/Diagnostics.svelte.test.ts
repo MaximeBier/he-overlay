@@ -12,7 +12,7 @@ const ENTRIES: JournalEntry[] = [
 ];
 
 function panel(overrides: Record<string, unknown> = {}) {
-  const handlers = { onCaptureRaw: vi.fn(), onToggleProbe: vi.fn() };
+  const handlers = { onCaptureRaw: vi.fn(), onToggleProbe: vi.fn(), onTestObs: vi.fn() };
   const props = {
     entries: ENTRIES,
     logText: '+1.0s\tuser\tOBS unreachable',
@@ -21,6 +21,7 @@ function panel(overrides: Record<string, unknown> = {}) {
     capturing: false,
     probing: false,
     probe: null,
+    obsProbe: null,
     ...handlers,
     ...overrides,
   };
@@ -162,5 +163,30 @@ describe('what it costs while shut', () => {
     // Bound, so the page can stop computing the live reading — which follows
     // the frame, sixty times a second — while nobody is looking at it.
     expect(panel({ open: true }).container.querySelector('details')!.open).toBe(true);
+  });
+});
+
+describe('the OBS probe', () => {
+  it('asks on demand, and says nothing before it was asked', () => {
+    const { container, onTestObs } = panel();
+
+    expect(container.querySelector('[data-obs-probe]')).toBeNull();
+    button(container, 'test-obs').click();
+
+    expect(onTestObs).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows what the throwaway connection answered', () => {
+    const { container } = panel({ obsProbe: 'auth-failed' });
+
+    expect(container.querySelector('[data-obs-probe]')!.textContent).toContain('auth-failed');
+  });
+
+  it('warns that OBS will briefly show two clients', () => {
+    // Someone watching the OBS side while debugging a connection is exactly
+    // who presses this, and an unexplained second client is a new mystery.
+    // \s+, not a space: prettier wraps the sentence and `textContent` keeps
+    // the newline. An assertion that breaks on reflow tests the formatter.
+    expect(panel().container.textContent).toMatch(/two\s+clients/i);
   });
 });
