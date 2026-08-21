@@ -531,3 +531,26 @@ describe('LayoutEditor - the size OBS has to be told', () => {
     expect(container.querySelector('.source code')!.textContent).not.toBe(before);
   });
 });
+
+describe('LayoutEditor - the lasso follows the scroll', () => {
+  it('reads the pointer in the content, not in the visible box', async () => {
+    // The stage gained `overflow: auto` in this milestone, and the handles are
+    // positioned inside the box that scrolls. `getBoundingClientRect()` of a
+    // scroll container does *not* move when its own content scrolls, so the
+    // conversion has to add the scroll back — otherwise a layout scrolled by
+    // one key draws the lasso a key away from the pointer and selects the
+    // neighbours. jsdom scrolls nothing on its own, so the offset is set here.
+    const { container } = editor();
+    const stage = container.querySelector<HTMLElement>('.stage')!;
+    stage.scrollLeft = DEFAULT_STYLE.unit;
+
+    press(stage, { clientX: 1, clientY: 1 });
+    move(stage, { clientX: DEFAULT_STYLE.unit / 2, clientY: DEFAULT_STYLE.unit / 2 });
+    await tick();
+
+    const pressed = [...container.querySelectorAll('button.handle')].map((handle) =>
+      handle.getAttribute('aria-pressed'),
+    );
+    expect(pressed).toEqual(['false', 'true']);
+  });
+});

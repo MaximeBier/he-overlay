@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { JournalEntry } from './journal';
   import type { StreamReading } from './probe';
+  import { copyToClipboard } from './clipboard';
 
   /**
    * The panel a bug report is written from (spec §11, §12.3).
@@ -50,15 +51,22 @@
     onTestObs: () => void;
   } = $props();
 
-  let copied = $state(false);
+  /**
+   * Idle, done, or failed — never a bare boolean.
+   *
+   * "Copied" over an empty clipboard is worse than no button at all: the
+   * person walks away, pastes nothing, and blames the paste. It never re-armed
+   * either, so a second copy gave no feedback whatever. Timers are banned on
+   * this page, so the reset rides the blur.
+   */
+  let copyState = $state<'idle' | 'done' | 'failed'>('idle');
 
   async function copy() {
     // The build and the browser go with it. They are the two facts a reader
     // needs before the first line, and the two nobody thinks to paste — the
     // user agent in particular names OBS's embedded Chromium (spec §2.1).
     const header = `HE Overlay ${__BUILD__}\n${navigator.userAgent}\n\n`;
-    await navigator.clipboard?.writeText(header + logText());
-    copied = true;
+    copyState = (await copyToClipboard(navigator, header + logText())) ? 'done' : 'failed';
   }
 
   const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
@@ -78,8 +86,8 @@
         {/each}
       </ul>
     {/if}
-    <button data-action="copy" type="button" onclick={copy}>
-      {copied ? 'Copied' : 'Copy log'}
+    <button data-action="copy" type="button" onclick={copy} onblur={() => (copyState = 'idle')}>
+      {copyState === 'done' ? 'Copied' : copyState === 'failed' ? 'Copy failed' : 'Copy log'}
     </button>
   </section>
 

@@ -2,6 +2,7 @@
   import { stepNumber, type WizardStep } from './wizard';
   import type { ConnectionSettings } from './settings';
   import type { KeyboardStatus } from '../keyboard/device';
+  import { copyToClipboard } from './clipboard';
 
   /**
    * The first-run setup, as boards `6a`–`6c` draw it.
@@ -72,11 +73,11 @@
   }
 
   let revealed = $state(false);
-  let copied = $state(false);
+  /** Tri-state and blur-reset, for the reasons in `clipboard.ts`. */
+  let copyState = $state<'idle' | 'done' | 'failed'>('idle');
 
   async function copy() {
-    await navigator.clipboard?.writeText(url);
-    copied = true;
+    copyState = (await copyToClipboard(navigator, url)) ? 'done' : 'failed';
   }
 
   /**
@@ -159,8 +160,14 @@
 
       <div class="url">
         <input data-url readonly value={url} aria-label="Overlay URL for OBS" />
-        <button class="primary" data-action="copy" type="button" onclick={copy}>
-          {copied ? 'Copied' : 'Copy URL'}
+        <button
+          class="primary"
+          data-action="copy"
+          type="button"
+          onclick={copy}
+          onblur={() => (copyState = 'idle')}
+        >
+          {copyState === 'done' ? 'Copied' : copyState === 'failed' ? 'Copy failed' : 'Copy URL'}
         </button>
       </div>
 

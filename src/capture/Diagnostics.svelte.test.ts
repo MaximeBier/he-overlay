@@ -126,25 +126,35 @@ describe('the background probe', () => {
 });
 
 describe('naming itself', () => {
-  it('says which build is running', () => {
-    // A report that cannot name its build is a report about an unknown program.
-    expect(panel().container.querySelector('[data-build]')!.textContent).toBeTruthy();
+  it('says which build is running, and not merely its own name', () => {
+    // `toBeTruthy` passed on the literal "HE Overlay " alone, so it could not
+    // notice `__BUILD__` going empty — the one failure the whole mechanism
+    // exists to prevent, and the one a lost `define` in vite.config produces.
+    const shown = panel().container.querySelector('[data-build]')!.textContent ?? '';
+
+    expect(shown.replace('HE Overlay', '').trim()).not.toBe('');
   });
 });
 
 describe('what it costs while shut', () => {
-  it('reads no frame until something renders it', () => {
-    // The fold around this one only renders the body while open, so passing a
-    // function rather than a list is what makes a shut panel free: nothing
-    // calls it, so nothing reads `frame` sixty times a second.
+  it('takes the reading as a function, so a shut fold can skip it', () => {
+    // What the shape actually guarantees, tested where it is observable. The
+    // fold above renders this body only while open; the cost of a shut one is
+    // therefore whatever the *parent* evaluates, and a function is what lets
+    // it evaluate nothing.
+    //
+    // The previous version mounted the panel open and asserted the reading had
+    // been called — the opposite of its own name, true whether it ran once or
+    // sixty times a second, and still true if someone swapped the function for
+    // an eagerly-built list. It guarded nothing.
     let calls = 0;
-    panel({
-      readings: () => {
-        calls += 1;
-        return [];
-      },
-    });
+    const readings = () => {
+      calls += 1;
+      return [];
+    };
 
+    expect(calls).toBe(0);
+    panel({ readings });
     expect(calls).toBeGreaterThan(0);
   });
 });
@@ -171,5 +181,39 @@ describe('the OBS probe', () => {
     // \s+, not a space: prettier wraps the sentence and `textContent` keeps
     // the newline. An assertion that breaks on reflow tests the formatter.
     expect(panel().container.textContent).toMatch(/two\s+clients/i);
+  });
+});
+
+describe('a copy button that cannot lie', () => {
+  it('says it failed when there is no clipboard to write to', async () => {
+    // `navigator.clipboard` is undefined outside a secure context — the LAN
+    // host `http://<ip>:8080` this product documents as a real deployment.
+    // The button used to say "Copied" over an empty clipboard, and the person
+    // walked away, pasted nothing, and blamed the paste.
+    vi.stubGlobal('navigator', { userAgent: 'test' });
+    const { container } = panel();
+
+    button(container, 'copy').click();
+    await tick();
+
+    expect(button(container, 'copy').textContent).toMatch(/failed/i);
+    vi.unstubAllGlobals();
+  });
+
+  it('re-arms on blur, since no timer may reset it', async () => {
+    const writeText = vi.fn((_text: string) => Promise.resolve());
+    vi.stubGlobal('navigator', { userAgent: 'test', clipboard: { writeText } });
+    const { container } = panel();
+
+    button(container, 'copy').click();
+    // `waitFor`, not a single tick: the success path awaits the clipboard
+    // promise, so the label settles a microtask after the scheduler has run.
+    await vi.waitFor(() => expect(button(container, 'copy').textContent).toMatch(/copied/i));
+
+    button(container, 'copy').dispatchEvent(new FocusEvent('blur'));
+    await tick();
+
+    expect(button(container, 'copy').textContent).toMatch(/copy log/i);
+    vi.unstubAllGlobals();
   });
 });

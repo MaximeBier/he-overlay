@@ -156,12 +156,21 @@
     lasso = { from: at, to: at, base };
   }
 
-  /** Where the pointer is on the stage, in key units. */
+  /**
+   * Where the pointer is in the layout, in key units.
+   *
+   * The scroll has to be added back. `getBoundingClientRect()` of a scroll
+   * container is its border box, which does **not** move when its own content
+   * scrolls — while the handles, positioned inside that content, do. Without
+   * this a layout scrolled by one key drew the lasso a key away from the
+   * pointer and selected the neighbours. Found in review on 2026-08-21, on a
+   * stage that only became scrollable in this same milestone.
+   */
   function stagePoint(event: PointerEvent): Point {
     const box = stage?.getBoundingClientRect();
     return {
-      x: pixelsToUnits(event.clientX - (box?.left ?? 0), unit),
-      y: pixelsToUnits(event.clientY - (box?.top ?? 0), unit),
+      x: pixelsToUnits(event.clientX - (box?.left ?? 0) + (stage?.scrollLeft ?? 0), unit),
+      y: pixelsToUnits(event.clientY - (box?.top ?? 0) + (stage?.scrollTop ?? 0), unit),
     };
   }
 

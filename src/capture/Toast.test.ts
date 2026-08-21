@@ -26,13 +26,20 @@ describe('Toast', () => {
     expect(shown(container)!.textContent).toContain('2 keys skipped');
   });
 
-  it('announces itself without stealing the focus', () => {
-    // The toast appears while someone is mid-gesture in the profile menu.
-    // Anything that moves the focus would close the menu they are still using.
+  it('announces itself without becoming something to reach', () => {
+    // The toast appears while someone is mid-gesture in the profile menu, and
+    // it must not join the tab order or take the focus away from what they
+    // are using.
+    //
+    // The old assertion — `document.activeElement` is still the body — held
+    // for every change short of an explicit `focus()`, including one that
+    // added a tabindex. These name the invariant instead.
     const { container } = toast({ tone: 'success', message: 'Profile imported' });
+    const element = shown(container)!;
 
-    expect(shown(container)!.getAttribute('role')).toBe('status');
-    expect(document.activeElement).toBe(document.body);
+    expect(element.getAttribute('role')).toBe('status');
+    expect(element.hasAttribute('tabindex')).toBe(false);
+    expect(container.querySelectorAll('button, [href], input, [tabindex]')).toHaveLength(0);
   });
 
   it('goes away on the end of its own fade, never on a timer', async () => {

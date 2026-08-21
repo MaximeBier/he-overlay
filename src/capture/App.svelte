@@ -29,6 +29,7 @@
   import Diagnostics from './Diagnostics.svelte';
   import Collapsible from './Collapsible.svelte';
   import Gated from './Gated.svelte';
+  import { copyToClipboard } from './clipboard';
   import { createJournal, describeAnomaly, hexDump, type JournalEntry } from './journal';
   import { createStreamProbe, type StreamReading } from './probe';
   import {
@@ -429,12 +430,20 @@
    */
   const styled = $derived(STYLE_KEYS.some((key) => config.style[key] !== DEFAULT_STYLE[key]));
 
-  let urlCopied = $state(false);
+  /** See `clipboard.ts`: the copy can silently not happen, and used to lie. */
+  let urlCopied = $state<'idle' | 'done' | 'failed'>('idle');
 
   async function copyUrl() {
-    await navigator.clipboard?.writeText(url);
-    urlCopied = true;
-    note('user', 'Overlay URL copied.');
+    const copied = await copyToClipboard(navigator, url);
+    urlCopied = copied ? 'done' : 'failed';
+    // The journal is what goes into a bug report. A line claiming the URL
+    // was copied when it was not sends whoever reads it down the wrong path.
+    note(
+      'user',
+      copied
+        ? 'Overlay URL copied.'
+        : 'Overlay URL could not be copied — select the field and copy it by hand.',
+    );
   }
 
   function downloadProfile() {
@@ -654,7 +663,9 @@
           <Gated available={obsStatus === 'identified'} reason="Available once OBS is connected">
             <div class="url">
               <input readonly value={url} aria-label="Overlay URL for OBS" />
-              <button class="link" onclick={copyUrl}>{urlCopied ? 'Copied' : 'Copy'}</button>
+              <button class="link" onclick={copyUrl} onblur={() => (urlCopied = 'idle')}>
+                {urlCopied === 'done' ? 'Copied' : urlCopied === 'failed' ? 'Failed' : 'Copy'}
+              </button>
             </div>
 
             {#if config.keys.length > 0}

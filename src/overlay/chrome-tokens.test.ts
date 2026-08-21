@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { applyChromeTokens, CHROME_TOKENS } from './chrome-tokens';
 import { cssVariables } from '../styles/ui-tokens';
+// Vite hands the file over as a string; `import.meta.url` is not a file URL
+// under the test transform, so reading it from disk is not an option.
+import chromeSource from './BrowserChrome.svelte?raw';
 
 describe('the copy that is not allowed to drift', () => {
   it('matches the settings palette, entry for entry', () => {
@@ -28,5 +31,25 @@ describe('declaring them', () => {
     applyChromeTokens({ style: { setProperty: (n, v) => void set.push([n, v]) } });
 
     expect(set).toEqual(Object.entries(CHROME_TOKENS));
+  });
+});
+
+describe('every variable the decoration uses is declared', () => {
+  it('finds no `--he-*` in BrowserChrome that CHROME_TOKENS does not carry', () => {
+    // The half that matters, and the half the value check misses. The
+    // decoration is the one component that writes `var(--he-x)` **without a
+    // fallback** — every capture component passes one — precisely because
+    // `main.ts` is supposed to declare the nine. Adding `var(--he-accent)` to
+    // it compiles, ships, and renders an undefined property with nothing
+    // failing anywhere.
+    const used = [...new Set(chromeSource.match(/--he-[a-z-]+/g) ?? [])];
+
+    expect(used.filter((name) => !(name in CHROME_TOKENS))).toEqual([]);
+  });
+
+  it('really did read a component that uses them', () => {
+    // Guards the guard: a source that failed to load, or a regex that matched
+    // nothing, would make the assertion above pass for ever.
+    expect(chromeSource.match(/--he-[a-z-]+/g)?.length ?? 0).toBeGreaterThan(5);
   });
 });
