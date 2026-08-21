@@ -151,7 +151,7 @@ describe('what loading leaves behind in storage', () => {
     const result = loadConfig(storage);
 
     expect(result.problem).toBe('too-new');
-    expect(storage.map.get('he-overlay:config.backup')).toBe(raw);
+    expect(storage.map.get('he-overlay:backup:he-overlay:config')).toBe(raw);
   });
 
   it('keeps an unreadable configuration aside too, in case it can be salvaged', () => {
@@ -159,7 +159,7 @@ describe('what loading leaves behind in storage', () => {
 
     loadConfig(storage);
 
-    expect(storage.map.get('he-overlay:config.backup')).toBe('{{{');
+    expect(storage.map.get('he-overlay:backup:he-overlay:config')).toBe('{{{');
   });
 
   it('survives a storage that refuses to be written to while loading', () => {
@@ -404,6 +404,83 @@ describe('what a profile says about itself', () => {
 
     createProfileStore(storage).load('Default');
 
-    expect(storage.map.get('he-overlay:profile:Default.backup')).toBe('{{{');
+    expect(storage.map.get('he-overlay:backup:he-overlay:profile:Default')).toBe('{{{');
+  });
+});
+
+describe('a storage that refuses to write must not destroy anything', () => {
+  /** Reads work, writes fail. A full quota, or a browser that took storage away. */
+  function readOnly(initial: Record<string, string>) {
+    const map = new Map(Object.entries(initial));
+    return {
+      getItem: (key: string) => map.get(key) ?? null,
+      setItem: () => {
+        throw new DOMException('QuotaExceededError');
+      },
+      removeItem: (key: string) => void map.delete(key),
+      map,
+    };
+  }
+
+  const withOneProfile = () => ({
+    'he-overlay:profiles': JSON.stringify(['Default']),
+    'he-overlay:profile:Default': exportConfig(withKeys(aKey, anotherKey)),
+  });
+
+  it('keeps the profile when a rename cannot be written', () => {
+    // The worst failure this module can have. `write` swallows quota errors on
+    // purpose, but the `removeItem` that followed was not guarded: the copy
+    // never landed, the list never changed, and the source was deleted anyway.
+    // Both names then loaded the defaults, and the caller was told it worked.
+    const storage = readOnly(withOneProfile());
+    const store = createProfileStore(storage);
+
+    expect(store.rename('Default', 'Main')).toBe(false);
+    expect(store.load('Default').config.keys).toHaveLength(2);
+  });
+
+  it('keeps the profile when a removal cannot be written', () => {
+    // Same shape: the list write is swallowed, the deletion is not. The name
+    // survives in the list with nothing behind it.
+    const storage = readOnly({
+      ...withOneProfile(),
+      'he-overlay:profiles': JSON.stringify(['Default', 'Apex']),
+      'he-overlay:profile:Apex': exportConfig(withKeys(aKey)),
+    });
+    const store = createProfileStore(storage);
+
+    store.remove('Apex');
+
+    expect(store.load('Apex').config.keys).toHaveLength(1);
+  });
+});
+
+describe('a profile named like a backup', () => {
+  it('does not have its configuration overwritten by its neighbour failing', () => {
+    // `he-overlay:profile:X` + ".backup" is exactly `he-overlay:profile:X.backup`.
+    // With the backup written into the same namespace, a profile that failed to
+    // load buried the profile literally named "X.backup".
+    const storage = profileStorage({
+      'he-overlay:profiles': JSON.stringify(['Default', 'Default.backup']),
+      'he-overlay:profile:Default': '{{{',
+      'he-overlay:profile:Default.backup': exportConfig(withKeys(aKey)),
+    });
+    const store = createProfileStore(storage);
+
+    store.load('Default');
+
+    expect(store.load('Default.backup').config.keys).toHaveLength(1);
+  });
+
+  it('is not erased when its neighbour is removed', () => {
+    const storage = profileStorage({
+      'he-overlay:profiles': JSON.stringify(['Default', 'Default.backup']),
+      'he-overlay:profile:Default.backup': exportConfig(withKeys(aKey)),
+    });
+    const store = createProfileStore(storage);
+
+    store.remove('Default');
+
+    expect(store.load('Default.backup').config.keys).toHaveLength(1);
   });
 });

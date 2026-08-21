@@ -197,16 +197,28 @@
   function testObs() {
     obsProbe = 'testing…';
 
+    // The first terminal status wins, and nothing after it counts.
+    //
+    // `close()` is not neutral: it reports 'idle', which came straight back
+    // into this handler and overwrote the answer we had just recorded. Every
+    // probe — success, refused password, dead server — ended up reading
+    // "idle", which is the one word that answers nothing. Found in review on
+    // 2026-08-21; the test double described a `close()` that says nothing,
+    // and the real one speaks.
+    let answered = false;
+
     const probe = createObsClient({
       url: `ws://localhost:${port}`,
       password: settings.password,
       onStatus: (status) => {
-        // 'connecting' is not an answer. Everything else is terminal, and the
-        // socket closes on the spot: nothing is ever sent through this one,
-        // and leaving it open would show a second client in OBS for good.
-        if (status === 'connecting') return;
+        // 'connecting' is not an answer either — it is the question.
+        if (answered || status === 'connecting') return;
+
+        answered = true;
         obsProbe = status;
         note('user', `OBS probe: ${status}.`);
+        // Closed on the spot: nothing is ever sent through this one, and
+        // leaving it open would show a second client in OBS for good.
         probe.close();
       },
       onMessage: () => {},

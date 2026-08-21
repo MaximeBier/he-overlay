@@ -450,3 +450,31 @@ describe('an overlay speaking a protocol we cannot read', () => {
     expect(versions).toEqual([]);
   });
 });
+
+describe('close() is not a silent operation', () => {
+  it('reports idle, and says so to whoever is listening', () => {
+    // Not a detail. A caller that records the status and then closes gets its
+    // own answer overwritten by this one — which is how the diagnostics probe
+    // came to report "idle" for a success, a refused password and a dead
+    // server alike. The trap is worth pinning where the contract lives.
+    const { client, socket, statuses } = setup();
+    client.connect();
+    socket().receive(HELLO_NO_AUTH);
+    socket().receive({ op: 2, d: { negotiatedRpcVersion: 1 } });
+    statuses.length = 0;
+
+    client.close();
+
+    expect(statuses).toEqual(['idle']);
+  });
+
+  it('says nothing when there was nothing open', () => {
+    // Idempotent from idle: a second close must not announce a change that
+    // did not happen.
+    const { client, statuses } = setup();
+
+    client.close();
+
+    expect(statuses).toEqual([]);
+  });
+});

@@ -15,8 +15,14 @@ const profileKey = (name: string) => `he-overlay:profile:${name}`;
  * we just declined to guess at is not. A rolled-back deployment, or a tab
  * running cached JavaScript, would otherwise cost an evening of layout work
  * between the warning and the first change the user makes.
+ *
+ * **A namespace of its own, not a suffix.** `he-overlay:profile:X` plus
+ * ".backup" is character for character `profileKey('X.backup')`, and nothing
+ * stops anyone naming a profile that: the salvage copy of one profile landed
+ * on top of a real one, and removing the first erased the second. Found in
+ * review on 2026-08-21.
  */
-const backupKey = (key: string) => `${key}.backup`;
+const backupKey = (key: string) => `he-overlay:backup:${key}`;
 
 /** Storage that can be read and written. Writing may fail; reading may not. */
 type Store = Pick<Storage, 'getItem' | 'setItem'>;
@@ -24,14 +30,21 @@ type Store = Pick<Storage, 'getItem' | 'setItem'>;
 /** Profiles also delete: a single configuration never had anything to remove. */
 type ProfileStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
-function write(storage: Pick<Storage, 'setItem'>, key: string, value: string): void {
+/**
+ * Writes, and says whether it landed.
+ *
+ * Swallowing the error is right — the caller is usually mid-change and
+ * throwing would abort a broadcast too — but **swallowing it silently is
+ * not**, for the callers that go on to delete something. A rename whose copy
+ * never landed used to remove the source anyway and report success.
+ */
+function write(storage: Pick<Storage, 'setItem'>, key: string, value: string): boolean {
   try {
     storage.setItem(key, value);
+    return true;
   } catch {
-    // Quota, or a browser that refuses to write at all. Saving is a
-    // convenience: the caller is usually in the middle of applying a change
-    // and broadcasting it, and throwing here would abort both — the change
-    // would vanish with nothing to explain it.
+    // Quota, or a browser that refuses to write at all.
+    return false;
   }
 }
 
@@ -159,8 +172,8 @@ export function createProfileStore(storage: ProfileStorage): ProfileStore {
     return [DEFAULT_PROFILE];
   }
 
-  function writeNames(list: readonly string[]): void {
-    write(storage, PROFILES_KEY, JSON.stringify(list));
+  function writeNames(list: readonly string[]): boolean {
+    return write(storage, PROFILES_KEY, JSON.stringify(list));
   }
 
   function activeName(): string {
@@ -218,7 +231,10 @@ export function createProfileStore(storage: ProfileStorage): ProfileStore {
       // configuration, and nothing to switch to.
       if (remaining.length === 0) return;
 
-      writeNames(remaining);
+      // The list first, and only delete if it took: a shortened list that
+      // never landed alongside a deletion that did leaves a name pointing at
+      // nothing, for good.
+      if (!writeNames(remaining)) return;
       storage.removeItem(profileKey(name));
       storage.removeItem(backupKey(profileKey(name)));
       if (activeName() === name) write(storage, ACTIVE_KEY, remaining[0]!);
@@ -238,8 +254,12 @@ export function createProfileStore(storage: ProfileStorage): ProfileStore {
       const wasActive = activeName() === from;
       const raw = storage.getItem(profileKey(from));
 
-      writeNames(list.map((entry) => (entry === from ? target : entry)));
-      if (raw !== null) write(storage, profileKey(target), raw);
+      // Copy, then list, then remove — and stop at the first refusal. Deleting
+      // the source before the copy is safely down is how a rename becomes a
+      // deletion, silently, on a storage that has simply run out of room.
+      if (raw !== null && !write(storage, profileKey(target), raw)) return false;
+      if (!writeNames(list.map((entry) => (entry === from ? target : entry)))) return false;
+
       storage.removeItem(profileKey(from));
       if (wasActive) write(storage, ACTIVE_KEY, target);
       return true;
