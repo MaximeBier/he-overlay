@@ -1,11 +1,9 @@
 import type { AnalogEntry } from '../keyboard/decode';
+import { createRateCounter } from './rate';
 import { MAX_TRAVEL } from '../keyboard/analog-report';
 import type { FrameKey } from './messages';
 
 export const FRAME_INTERVAL_MS = 1000 / 60;
-
-/** Window the emission rate is counted over. One second, so it reads as fps. */
-const RATE_WINDOW_MS = 1000;
 
 /**
  * A frame carries the configured keys only: the capture filters, the overlay has
@@ -145,7 +143,11 @@ export interface FrameEmitter {
 export function createFrameEmitter(minIntervalMs: number = FRAME_INTERVAL_MS): FrameEmitter {
   let lastFrame: FrameKey[] | null = null;
   let lastSentAt = Number.NEGATIVE_INFINITY;
-  const emittedAt: number[] = [];
+  // The same counter the overlay reads its own figure from. Two of them would
+  // eventually disagree by a little, and the two pills sit side by side on a
+  // screen where somebody is working out where a stream went.
+  const emitted = createRateCounter();
+  let lastSeenAt = Number.NEGATIVE_INFINITY;
 
   function reasonFor(frame: FrameKey[], now: number): EmitReason {
     if (sameFrame(lastFrame, frame)) return null;
@@ -171,18 +173,14 @@ export function createFrameEmitter(minIntervalMs: number = FRAME_INTERVAL_MS): F
     return null;
   }
 
-  /** Ages emissions out of the rate window. */
-  function trim(now: number) {
-    while (emittedAt.length > 0 && now - emittedAt[0]! >= RATE_WINDOW_MS) emittedAt.shift();
-  }
-
   return {
     push(frame, now, deliver) {
-      // Trimmed on every report, not only when a frame goes out. Doing it on
-      // success alone freezes the window the moment OBS goes away — nothing
-      // leaves, so nothing ages, and the last good count stays on screen for
-      // good beside a dot saying the connection is dead.
-      trim(now);
+      // Remembered on every report, not only when a frame goes out: the rate
+      // is read through this clock, and reading it only on success freezes the
+      // window the moment OBS goes away — nothing leaves, so nothing ages, and
+      // the last good count stays on screen beside a dot saying the link is
+      // dead.
+      lastSeenAt = now;
 
       const reason = reasonFor(frame, now);
       if (reason === null) return null;
@@ -198,7 +196,7 @@ export function createFrameEmitter(minIntervalMs: number = FRAME_INTERVAL_MS): F
       // Counted, not derived from the last interval: two thirds of the frames
       // go out off cadence — every actuation change does — and a single one
       // millisecond apart would read as a thousand frames per second.
-      emittedAt.push(now);
+      emitted.tick(now);
 
       return reason;
     },
@@ -209,7 +207,7 @@ export function createFrameEmitter(minIntervalMs: number = FRAME_INTERVAL_MS): F
       lastSentAt = Number.NEGATIVE_INFINITY;
     },
     get rate() {
-      return emittedAt.length;
+      return emitted.read(lastSeenAt);
     },
   };
 }

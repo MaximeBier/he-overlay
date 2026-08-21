@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createObsClient } from '../transport/obs';
   import { readOverlayParams } from './params';
+  import { createRateCounter } from '../protocol/rate';
   import { newOverlayId } from './identity';
   import KeyboardView from '../view/KeyboardView.svelte';
   import BrowserChrome from './BrowserChrome.svelte';
@@ -27,8 +28,17 @@
 
   let connected = $state(false);
   let rate = $state(0);
-  /** Frames since the last beat. Only the decorated view ever reads the rate. */
-  let received = 0;
+
+  /**
+   * The same counter the capture page measures itself with (`protocol/rate`).
+   *
+   * It used to be frames-since-the-last-beat, divided by two — a tumbling
+   * window, inherited from the beat's interval rather than chosen. It split a
+   * burst across two windows, understated the peak, and made the figure depend
+   * on when it happened to be asked. The two pills are read side by side; they
+   * have to be counting the same thing.
+   */
+  const frames = createRateCounter();
 
   /** How often the overlay announces itself, and the window the rate is read over. */
   const BEAT_MS = 2000;
@@ -50,7 +60,11 @@
       if (message.t === 'config') config = message.config;
       else if (message.t === 'frame') {
         frame = message.k;
-        received += 1;
+        // Counted and read on the frame itself: no interval decides how fresh
+        // the figure is, which is what "instantly" means here.
+        const now = performance.now();
+        frames.tick(now);
+        rate = frames.read(now);
       }
     },
   });
@@ -65,11 +79,10 @@
     // both are measured from `performance.timeOrigin`.
     obs.ensureConnected(performance.now());
     obs.broadcast({ v: 1, t: 'beat', id });
-    // Averaged over the beat rather than measured per frame: the figure is
-    // read by a human, and one that flickers is harder to read than one that
-    // settles. Costs nothing in OBS, where nothing displays it.
-    rate = Math.round(received / (BEAT_MS / 1000));
-    received = 0;
+    // The beat no longer measures anything — it only lets the figure fall.
+    // Without this re-read the count would freeze at its last value the moment
+    // frames stopped, printing 58/s beside a link that had gone quiet.
+    rate = frames.read(performance.now());
   }, BEAT_MS);
 
   // A reload draws a new id, so leaving in silence has the departed page
