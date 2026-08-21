@@ -1,16 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { isOrdinaryBrowser } from './host';
 
-/** A window with the address bar a browser puts above the page. */
 const browser = (over: Record<string, unknown> = {}) => ({
-  innerHeight: 900,
-  outerHeight: 1000,
   navigator: { userAgent: 'Mozilla/5.0 Chrome/128.0 Safari/537.36' },
   ...over,
 });
 
 describe('deciding whether anyone can see this page', () => {
-  it('says yes for a browser window with chrome above the page', () => {
+  it('says yes for an ordinary browser', () => {
     expect(isOrdinaryBrowser(browser())).toBe(true);
   });
 
@@ -36,18 +33,30 @@ describe('deciding whether anyone can see this page', () => {
     ).toBe(true);
   });
 
-  it('says no to a window with no chrome at all, whatever it claims to be', () => {
-    // The positive half of the rule (spec §16.7). An OBS browser source has no
-    // address bar, so its outer and inner heights are equal — and so does any
-    // other embedding we have never seen. Refusing them costs a bare page to
-    // someone who pressed F11; accepting them risks the one defect that must
-    // never happen.
-    expect(isOrdinaryBrowser(browser({ outerHeight: 900 }))).toBe(false);
-  });
-
   it('treats an obsstudio that is present but empty as OBS', () => {
     // Presence is the signal, not shape. A host that defines the property at
     // all is claiming to be OBS, and believing it errs on the safe side.
     expect(isOrdinaryBrowser(browser({ obsstudio: null }))).toBe(false);
+  });
+
+  it('does not measure the window, whatever the display scaling says', () => {
+    // The rule this replaces compared `outerHeight` against `innerHeight`,
+    // reasoning that a browser puts an address bar above the page and a
+    // browser source does not. Measured on Chrome / Windows 11 at 1440p on
+    // 2026-08-21 at 90 % page zoom: the outer height comes out the smaller of
+    // the two, because zoom resizes the CSS pixel `innerHeight` counts and
+    // leaves `outerHeight` alone. The platform promises no relation.
+    //
+    // Zoom is a per-site setting people set once and forget, so this made the
+    // failure routine rather than rare. Neither remaining signal reads a size.
+
+    // Bound to a name first: passed as literals, the compiler rejects the two
+    // properties outright — which is itself the point. They are gone from
+    // `HostWindow`, so nothing can read them again by accident.
+    const zoomedOut = { ...browser(), innerHeight: 1000, outerHeight: 900 };
+    const plain = { ...browser(), innerHeight: 900, outerHeight: 1000 };
+
+    expect(isOrdinaryBrowser(zoomedOut)).toBe(true);
+    expect(isOrdinaryBrowser(plain)).toBe(true);
   });
 });
