@@ -31,7 +31,7 @@ export interface CaptureSession {
    */
   resend(now: number): void;
   /** Frames per second currently going out to OBS. */
-  readonly rate: number;
+  rateAt(now: number): number;
 }
 
 export function createCaptureSession(options: CaptureSessionOptions): CaptureSession {
@@ -63,8 +63,8 @@ export function createCaptureSession(options: CaptureSessionOptions): CaptureSes
       emitter.reset();
       emitter.push(current, now, deliver);
     },
-    get rate() {
-      return emitter.rate;
+    rateAt(now) {
+      return emitter.rateAt(now);
     },
   };
 }

@@ -117,7 +117,7 @@ describe('createCaptureSession — throughput', () => {
     const rates: number[] = [];
     const session = createCaptureSession({
       obs: { broadcast: vi.fn(() => true), ensureConnected: vi.fn() } as never,
-      onKeys: () => rates.push(session.rate),
+      onKeys: () => rates.push(session.rateAt(0)),
       onAnomaly: () => {},
     });
 

@@ -159,10 +159,11 @@ describe('createFrameEmitter', () => {
 
   it('measures the emission rate in frames per second', () => {
     const emitter = createFrameEmitter();
+    const last = 9 * FRAME_INTERVAL_MS * 1.01;
     for (let i = 0; i < 10; i++) emitter.push([[3, i * 10, 0]], i * FRAME_INTERVAL_MS * 1.01, sent);
 
-    expect(emitter.rate).toBeGreaterThan(0);
-    expect(emitter.rate).toBeLessThanOrEqual(61);
+    expect(emitter.rateAt(last)).toBeGreaterThan(0);
+    expect(emitter.rateAt(last)).toBeLessThanOrEqual(61);
   });
 
   // A burst of off-cadence emissions is normal — every actuation change is one.
@@ -174,7 +175,7 @@ describe('createFrameEmitter', () => {
     emitter.push([[3, 110, 1]], 1, sent);
     emitter.push([[3, 120, 0]], 2, sent);
 
-    expect(emitter.rate).toBe(3);
+    expect(emitter.rateAt(2)).toBe(3);
   });
 
   it('forgets the emissions older than one second', () => {
@@ -182,7 +183,7 @@ describe('createFrameEmitter', () => {
     emitter.push([[3, 100, 0]], 0, sent);
     emitter.push([[3, 200, 0]], 2000, sent);
 
-    expect(emitter.rate).toBe(1);
+    expect(emitter.rateAt(2000)).toBe(1);
   });
 });
 
@@ -206,7 +207,7 @@ describe('createFrameEmitter — the far end only saw what actually left', () =>
     emitter.push([[3, 100, 0]], 0, dropped);
     emitter.push([[3, 200, 0]], 1, dropped);
 
-    expect(emitter.rate).toBe(0);
+    expect(emitter.rateAt(1)).toBe(0);
   });
 
   it('lets the rate fall back to zero once nothing is going out', () => {
@@ -216,11 +217,11 @@ describe('createFrameEmitter — the far end only saw what actually left', () =>
     const emitter = createFrameEmitter();
     emitter.push([[3, 100, 0]], 0, sent);
     emitter.push([[3, 200, 0]], 100, sent);
-    expect(emitter.rate).toBe(2);
+    expect(emitter.rateAt(100)).toBe(2);
 
     emitter.push([[3, 300, 0]], 2000, dropped);
 
-    expect(emitter.rate).toBe(0);
+    expect(emitter.rateAt(2000)).toBe(0);
   });
 
   it('ages the window out even on frames the cap sacrifices', () => {
@@ -230,7 +231,7 @@ describe('createFrameEmitter — the far end only saw what actually left', () =>
     // Identical frame, so nothing is emitted — but a second has gone by.
     emitter.push([[3, 100, 0]], 2000, sent);
 
-    expect(emitter.rate).toBe(0);
+    expect(emitter.rateAt(2000)).toBe(0);
   });
 
   // The milestone 2 review found this one, and it is spec §6.2 all over again:
@@ -272,7 +273,7 @@ describe('createFrameEmitter — the far end only saw what actually left', () =>
     emitter.push([[3, 100, 0]], 0, sent);
     emitter.reset();
 
-    expect(emitter.rate).toBe(1);
+    expect(emitter.rateAt(0)).toBe(1);
   });
 });
 
@@ -383,5 +384,20 @@ describe('createFrameEmitter - both ends of the travel are guaranteed', () => {
     emitter.push([[3, 1023, 1]], 0, sent);
 
     expect(emitter.push([[3, 0, 0]], 1, sent)).toBe('active-change');
+  });
+});
+
+describe('createFrameEmitter — the rate ages on the clock, not on the keyboard', () => {
+  it('falls back to zero when asked later, with nothing pushed since', () => {
+    // The Wooting speaks only on change. As a getter reading its own last
+    // report timestamp, the rate froze the moment somebody stopped typing and
+    // the status bar kept the last figure indefinitely. Taking the clock as an
+    // argument is what lets a caller with a fresher one see the truth.
+    const emitter = createFrameEmitter();
+    emitter.push([[3, 100, 0]], 0, sent);
+    emitter.push([[3, 200, 0]], 100, sent);
+
+    expect(emitter.rateAt(100)).toBe(2);
+    expect(emitter.rateAt(5_000)).toBe(0);
   });
 });

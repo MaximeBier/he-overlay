@@ -299,6 +299,12 @@
         // Presence and configuration are both driven by these three messages,
         // so one place reads them (spec §6).
         broadcaster.onOverlayMessage(message, performance.now());
+        // The rate ages here as well as on reports. The keyboard speaks only
+        // on change, so once someone stops typing nothing advances the window
+        // and the last figure stayed on screen for good. An overlay beats
+        // every two seconds; that is the clock this page is allowed to have,
+        // because it arrives as an event rather than from a timer.
+        rate = session.rateAt(performance.now());
         // Spec §6: a fresh overlay holds nothing, and the emitter would
         // otherwise deduplicate its way to a blank page until the next
         // keystroke.
@@ -359,6 +365,11 @@
     const next = profiles.load(name);
     health = { problem: next.problem, dropped: next.dropped, from: 'load' };
     config = next.config;
+    // Both name keys of the profile being left. Two profiles can share a matrix
+    // index, so a stale selection does not merely look wrong — "Delete 3
+    // selected keys" would act on a set nobody chose in this profile.
+    selectedIds = [];
+    lastKey = null;
     broadcaster.publish(config);
 
     return loadToast(next.problem);
@@ -524,7 +535,9 @@
     },
     onKeys: (k) => {
       frame = k;
-      rate = session.rate;
+      // A synchronous reading, not a timer, and taken inside the report
+      // handler — so it is the report's own moment to within microseconds.
+      rate = session.rateAt(performance.now());
       // Refreshed here, not in the report handler: this runs at the emission
       // rate, which is bounded, and nothing about the figures needs to be
       // fresher than what the eye can read.

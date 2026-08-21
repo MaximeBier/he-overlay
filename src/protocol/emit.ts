@@ -137,7 +137,16 @@ export interface FrameEmitter {
    */
   reset(): void;
   /** Frames per second, counted over report timestamps — never over a timer. */
-  readonly rate: number;
+  /**
+   * Frames per second at `now` — the clock is an argument, deliberately.
+   *
+   * As a getter reading its own last report timestamp, it froze the instant
+   * the keyboard fell silent: the Wooting speaks only on change, so nothing
+   * aged the window and the last figure stayed on screen indefinitely. That is
+   * the exact failure `rate.ts` documents as the reason `read` takes a clock,
+   * and the capture side was still getting it wrong.
+   */
+  rateAt(now: number): number;
 }
 
 export function createFrameEmitter(minIntervalMs: number = FRAME_INTERVAL_MS): FrameEmitter {
@@ -147,7 +156,6 @@ export function createFrameEmitter(minIntervalMs: number = FRAME_INTERVAL_MS): F
   // eventually disagree by a little, and the two pills sit side by side on a
   // screen where somebody is working out where a stream went.
   const emitted = createRateCounter();
-  let lastSeenAt = Number.NEGATIVE_INFINITY;
 
   function reasonFor(frame: FrameKey[], now: number): EmitReason {
     if (sameFrame(lastFrame, frame)) return null;
@@ -175,13 +183,6 @@ export function createFrameEmitter(minIntervalMs: number = FRAME_INTERVAL_MS): F
 
   return {
     push(frame, now, deliver) {
-      // Remembered on every report, not only when a frame goes out: the rate
-      // is read through this clock, and reading it only on success freezes the
-      // window the moment OBS goes away — nothing leaves, so nothing ages, and
-      // the last good count stays on screen beside a dot saying the link is
-      // dead.
-      lastSeenAt = now;
-
       const reason = reasonFor(frame, now);
       if (reason === null) return null;
       // Nothing is recorded until the frame is out. A dropped broadcast leaves
@@ -206,8 +207,8 @@ export function createFrameEmitter(minIntervalMs: number = FRAME_INTERVAL_MS): F
       lastFrame = null;
       lastSentAt = Number.NEGATIVE_INFINITY;
     },
-    get rate() {
-      return emitted.read(lastSeenAt);
+    rateAt(now) {
+      return emitted.read(now);
     },
   };
 }

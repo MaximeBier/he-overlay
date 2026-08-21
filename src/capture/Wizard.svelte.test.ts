@@ -177,3 +177,40 @@ describe('arming the capture', () => {
     expect(listening).toEqual([true]);
   });
 });
+
+describe('putting the setup aside', () => {
+  it('stops listening on the way out of the last step', async () => {
+    // Arriving at step 3 arms the capture. Skipping from there used to unmount
+    // the card with the capture still armed: the banner vanished, and the next
+    // key the person brushed was added to the layout in silence.
+    const listening: boolean[] = [];
+    let value = false;
+    const { container } = render(Wizard, {
+      props: {
+        step: 'keys' as WizardStep,
+        keyboard: 'connected' as KeyboardStatus,
+        device: 'Wooting 60HE',
+        settings: { port: 4455, password: '' },
+        url: 'https://he-overlay.example/overlay.html?port=4455',
+        get learning() {
+          return value;
+        },
+        set learning(next: boolean) {
+          value = next;
+          listening.push(next);
+        },
+        added: null,
+        onAllowKeyboard: vi.fn(),
+        onReconnect: vi.fn(),
+        onSkip: vi.fn(),
+      },
+    });
+    await tick();
+    expect(listening).toEqual([true]);
+
+    container.querySelector<HTMLButtonElement>('[data-action="skip"]')!.click();
+    await tick();
+
+    expect(value).toBe(false);
+  });
+});

@@ -13,7 +13,11 @@ import { resolve } from 'node:path';
  * version is the git tag, which only CI knows. The image passes it in as a
  * build argument; a local build says `dev`, truthfully.
  */
-const BUILD = process.env.VITE_BUILD ?? 'dev';
+// `||`, not `??`: Docker turns `--build-arg VITE_BUILD=` into the empty
+// string rather than leaving it unset, and `??` lets that through. The panel
+// would then render "HE Overlay " with nothing after it — the anonymous build
+// this whole mechanism exists to prevent.
+const BUILD = process.env.VITE_BUILD || 'dev';
 
 export default defineConfig({
   plugins: [svelte(), svelteTesting()],

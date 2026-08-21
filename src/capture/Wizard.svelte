@@ -88,6 +88,19 @@
    * re-arming on every pass would make cancelling a fight the user cannot win,
    * with a button that refuses to turn off.
    */
+  /**
+   * Puts the setup aside, and disarms the capture on the way out.
+   *
+   * The effect above arms it on arrival at the last step and only disarms when
+   * the step *changes* — but skipping unmounts the card instead, leaving the
+   * page listening with nothing on screen to say so. The next key brushed was
+   * added to the layout in silence.
+   */
+  function skip() {
+    learning = false;
+    onSkip();
+  }
+
   let armed = $state(false);
   $effect(() => {
     if (step !== 'keys') {
@@ -110,7 +123,7 @@
       <strong>Listening · press any key</strong>
       {#if added}<span class="added">{added} added</span>{/if}
     </span>
-    <button class="skip" data-action="skip" type="button" onclick={onSkip}>Skip tutorial</button>
+    <button class="skip" data-action="skip" type="button" onclick={skip}>Skip tutorial</button>
   </div>
 {:else}
   <div class="card" data-card>
@@ -198,7 +211,7 @@
           {keyboard === 'no-permission' ? 'Allow keyboard' : 'Rescan devices'}
         </button>
       {/if}
-      <button class="skip" data-action="skip" type="button" onclick={onSkip}>Skip tutorial</button>
+      <button class="skip" data-action="skip" type="button" onclick={skip}>Skip tutorial</button>
     </div>
   </div>
 {/if}
