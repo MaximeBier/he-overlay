@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, cleanup } from '@testing-library/svelte';
 import KeyPopover from './KeyPopover.svelte';
+import popoverSource from './KeyPopover.svelte?raw';
 import { setKeyLabel, setKeyStyle } from '../config/edit';
 import { defaultConfig, type OverlayConfig } from '../config/schema';
 
@@ -271,5 +272,25 @@ describe('KeyPopover - going back to the detected label', () => {
     const renamed = setKeyLabel(twoKeys(), 1, 'Sprint');
 
     expect(resetLabel(withLayout(renamed, null).container)).toBeNull();
+  });
+});
+
+describe('the width the editor is told about', () => {
+  it('measures the whole panel, padding and border included', () => {
+    // The editor clamps the popover against the right edge of the stage using
+    // `--he-popover-width`. Without `box-sizing: border-box` that token is the
+    // *content* box and the panel really occupies 312 px — so it kept
+    // overflowing by exactly the padding, and the stage grew a scrollbar.
+    //
+    // Read from the source, because jsdom applies no layout and does not
+    // resolve Svelte's injected scoped styles: `getComputedStyle` answers
+    // "content-box" here whatever the component declares.
+    const rule = popoverSource.slice(
+      popoverSource.indexOf('.popover {'),
+      popoverSource.indexOf('}', popoverSource.indexOf('.popover {')),
+    );
+
+    expect(rule).toContain('box-sizing: border-box');
+    expect(rule).toContain('--he-popover-width');
   });
 });

@@ -59,6 +59,8 @@ export const UI_TOKENS = {
   space: '0.5rem',
   headerHeight: '62px',
   panelWidth: '380px',
+  /** Read by the editor too, which has to keep the popover inside the stage. */
+  popoverWidth: '284px',
 } as const;
 
 const CSS_PREFIX = '--he-';

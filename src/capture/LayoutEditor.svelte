@@ -2,6 +2,7 @@
   import KeyboardView from '../view/KeyboardView.svelte';
   import KeyPopover from './KeyPopover.svelte';
   import { hasOverrides, resolve } from '../config/resolve';
+  import { UI_TOKENS } from '../styles/ui-tokens';
   import { recommendedSize } from '../view/scene';
   import { keysWithin, moveKeysBy, normalizeRect, pixelsToUnits, type Point } from './layout';
   import { removeKeys } from './learn';
@@ -104,10 +105,28 @@
       editingFor.every((id) => selectedIds.includes(id)),
   );
 
-  /** Below the selection's bounding box, in stage pixels. */
-  const anchor = $derived({
-    x: Math.min(...selection.map((key) => key.x)) * unit,
-    y: Math.max(...selection.map((key) => key.y + key.h)) * unit,
+  const POPOVER_WIDTH = Number.parseInt(UI_TOKENS.popoverWidth, 10);
+
+  /**
+   * Below the selection's bounding box, in stage pixels — and never past the
+   * right edge.
+   *
+   * Anchored to a key near the edge, the popover used to run outside the
+   * visible stage. The stage scrolls, so instead of the panel moving, a
+   * horizontal scrollbar appeared and half the controls sat off-screen.
+   * Clamped against the *visible* window rather than the content, so it still
+   * lands correctly on a layout that is scrolled sideways.
+   */
+  const anchor = $derived.by(() => {
+    const left = Math.min(...selection.map((key) => key.x)) * unit;
+    const y = Math.max(...selection.map((key) => key.y + key.h)) * unit;
+
+    const room = stage?.clientWidth ?? 0;
+    if (room === 0) return { x: left, y };
+
+    const from = stage?.scrollLeft ?? 0;
+    const limit = Math.max(from, from + room - POPOVER_WIDTH - gap);
+    return { x: Math.min(left, limit), y };
   });
 
   function open(id: number) {

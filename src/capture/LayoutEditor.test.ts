@@ -554,3 +554,37 @@ describe('LayoutEditor - the lasso follows the scroll', () => {
     expect(pressed).toEqual(['false', 'true']);
   });
 });
+
+describe('LayoutEditor - the popover stays inside the stage', () => {
+  const room = (el: Element, width: number) =>
+    Object.defineProperty(el, 'clientWidth', { value: width, configurable: true });
+
+  it('slides the popover left rather than off the right edge', async () => {
+    // Anchored to a key near the edge, a 284 px panel ran outside the visible
+    // stage. The stage scrolls, so instead of the panel moving, a horizontal
+    // scrollbar appeared and half the controls sat off-screen.
+    const config = twoKeys();
+    config.keys[1]!.x = 8;
+    const { container, handles } = editor(config);
+    room(container.querySelector('.stage')!, 700);
+
+    handles[1]!.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    await tick();
+
+    const left = Number.parseFloat(container.querySelector<HTMLElement>('.anchor')!.style.left);
+    expect(left).toBeLessThan(8 * DEFAULT_STYLE.unit);
+    expect(left + 284).toBeLessThanOrEqual(700);
+  });
+
+  it('leaves a popover that already fits exactly where the key is', async () => {
+    const { container, handles } = editor();
+    room(container.querySelector('.stage')!, 2000);
+
+    handles[1]!.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    await tick();
+
+    expect(container.querySelector<HTMLElement>('.anchor')!.style.left).toBe(
+      `${DEFAULT_STYLE.unit}px`,
+    );
+  });
+});

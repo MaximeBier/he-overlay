@@ -290,7 +290,13 @@
   .popover {
     display: grid;
     gap: 9px;
-    inline-size: 284px;
+    /* Border-box, or the token lies: without it the 284 px is the *content*
+       box and the panel really occupies 312 — padding and border on top. The
+       editor clamps the popover against the stage edge using that same token,
+       so a token that means something else is a popover that still overflows,
+       by exactly the padding. */
+    box-sizing: border-box;
+    inline-size: var(--he-popover-width, 284px);
     padding: 13px;
     background: var(--he-popover, #141722);
     border: 1px solid var(--he-border-popover, #262b3a);
