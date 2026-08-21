@@ -218,7 +218,7 @@
 
 <style>
   .card {
-    inline-size: 410px;
+    inline-size: 470px;
     max-inline-size: 100%;
     box-sizing: border-box;
     display: flex;
@@ -226,7 +226,7 @@
     gap: 16px;
     padding: 26px;
 
-    font: var(--he-font, 400 17px system-ui, sans-serif);
+    font: var(--he-font, 400 16px system-ui, sans-serif);
     color: var(--he-text, #dde1e9);
     background: var(--he-popover, #141722);
     border: 1px solid var(--he-border-popover, #262b3a);
@@ -245,7 +245,7 @@
   }
   .lede {
     margin: 0;
-    font-size: var(--he-size-md, 17px);
+    font-size: var(--he-size-md, 16px);
     line-height: 1.55;
     color: var(--he-text-muted, #8b90a0);
     text-wrap: pretty;
@@ -271,7 +271,7 @@
     display: flex;
     flex-direction: column;
     gap: 5px;
-    font-size: var(--he-size-sm, 15.5px);
+    font-size: var(--he-size-sm, 15px);
     color: var(--he-text-muted, #8b90a0);
   }
   .secret {
@@ -297,7 +297,7 @@
     box-sizing: border-box;
     inline-size: 100%;
     font: var(--he-font-mono, 400 15px ui-monospace, monospace);
-    font-size: var(--he-size-sm, 15.5px);
+    font-size: var(--he-size-sm, 15px);
     color: var(--he-text, #dde1e9);
     background: var(--he-stage, #0b0d11);
     border: 1px solid var(--he-border-control, #232838);
@@ -333,7 +333,7 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    font-size: var(--he-size-md, 17px);
+    font-size: var(--he-size-md, 16px);
     color: var(--he-text-faint, #5a5f70);
   }
   .bullet {
@@ -383,7 +383,7 @@
   .secondary {
     all: unset;
     cursor: pointer;
-    font-size: var(--he-size-md, 17px);
+    font-size: var(--he-size-md, 16px);
     font-weight: 600;
     border-radius: var(--he-radius-control, 5px);
     padding: 8px 16px;
@@ -407,7 +407,7 @@
   .skip {
     all: unset;
     cursor: pointer;
-    font-size: var(--he-size-sm, 15.5px);
+    font-size: var(--he-size-sm, 15px);
     color: var(--he-text-faint, #5a5f70);
   }
   .skip:hover {
@@ -426,7 +426,7 @@
     align-items: center;
     gap: 13px;
     padding: 13px 18px;
-    font: var(--he-font, 400 17px system-ui, sans-serif);
+    font: var(--he-font, 400 16px system-ui, sans-serif);
     color: var(--he-text, #dde1e9);
     background: var(--he-popover, #141722);
     border: 1px solid var(--he-accent, #7c9eff);
@@ -445,11 +445,11 @@
     gap: 3px;
   }
   .lines strong {
-    font-size: var(--he-size-lg, 19px);
+    font-size: var(--he-size-lg, 18px);
     font-weight: 700;
   }
   .added {
-    font-size: var(--he-size-sm, 15.5px);
+    font-size: var(--he-size-sm, 15px);
     color: var(--he-ok, #4caf7d);
   }
 </style>

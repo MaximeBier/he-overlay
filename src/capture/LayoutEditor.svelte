@@ -532,7 +532,7 @@
      not a reminder of what the mouse does. */
   .source {
     margin: 0;
-    font-size: var(--he-size-sm, 15.5px);
+    font-size: var(--he-size-sm, 15px);
     color: var(--he-text-muted, #8b90a0);
   }
   .source code {

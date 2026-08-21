@@ -172,7 +172,7 @@
   }
   h2 {
     margin: 0;
-    font-size: var(--he-size-sm, 15.5px);
+    font-size: var(--he-size-sm, 15px);
     font-weight: 600;
     letter-spacing: 0.05em;
     text-transform: uppercase;
@@ -185,7 +185,7 @@
     gap: 12px;
   }
   label {
-    font-size: var(--he-size-md, 17px);
+    font-size: var(--he-size-md, 16px);
     color: var(--he-text-muted, #8b90a0);
   }
   .value {
@@ -228,7 +228,7 @@
   }
   select {
     font: inherit;
-    font-size: var(--he-size-md, 17px);
+    font-size: var(--he-size-md, 16px);
     color: var(--he-text, #dde1e9);
     background: var(--he-stage, #0b0d11);
     border: 1px solid var(--he-border-control, #232838);

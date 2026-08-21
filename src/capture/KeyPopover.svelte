@@ -290,7 +290,7 @@
   .popover {
     display: grid;
     gap: 9px;
-    inline-size: 248px;
+    inline-size: 284px;
     padding: 13px;
     background: var(--he-popover, #141722);
     border: 1px solid var(--he-border-popover, #262b3a);
@@ -303,7 +303,7 @@
     gap: 8px;
   }
   .title {
-    font-size: var(--he-size-md, 17px);
+    font-size: var(--he-size-md, 16px);
     font-weight: 600;
     color: var(--he-text, #dde1e9);
   }
@@ -324,7 +324,7 @@
   }
   label,
   .label {
-    font-size: var(--he-size-md, 17px);
+    font-size: var(--he-size-md, 16px);
     color: var(--he-text-muted, #8b90a0);
   }
   .value {
@@ -341,7 +341,7 @@
   .segmented button {
     flex: 1;
     font: inherit;
-    font-size: var(--he-size-md, 17px);
+    font-size: var(--he-size-md, 16px);
     color: var(--he-text-muted, #8b90a0);
     background: none;
     border: 0;
@@ -362,7 +362,7 @@
     margin: 0;
     display: grid;
     gap: 6px;
-    font-size: var(--he-size-sm, 15.5px);
+    font-size: var(--he-size-sm, 15px);
     line-height: 1.4;
     color: var(--he-text-muted, #8b90a0);
     background: var(--he-surface, #151823);
@@ -398,7 +398,7 @@
   }
   .link {
     font: inherit;
-    font-size: var(--he-size-sm, 15.5px);
+    font-size: var(--he-size-sm, 15px);
     color: var(--he-accent, #7c9eff);
     background: none;
     border: 0;
@@ -410,7 +410,7 @@
   }
   .danger {
     font: inherit;
-    font-size: var(--he-size-md, 17px);
+    font-size: var(--he-size-md, 16px);
     color: var(--he-danger, #e06c5b);
     background: none;
     border: 1px solid #3a2226;
@@ -419,7 +419,7 @@
     cursor: pointer;
   }
   .times {
-    font-size: var(--he-size-sm, 15.5px);
+    font-size: var(--he-size-sm, 15px);
     color: var(--he-text-ghost, #4a4f60);
   }
   input[type='color'] {

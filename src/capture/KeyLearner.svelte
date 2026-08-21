@@ -35,8 +35,8 @@
     display: block;
     padding: 11px 0;
 
-    font: var(--he-font, 400 17px system-ui, sans-serif);
-    font-size: var(--he-size-sm, 15.5px);
+    font: var(--he-font, 400 16px system-ui, sans-serif);
+    font-size: var(--he-size-sm, 15px);
     font-weight: 700;
     text-align: center;
     cursor: pointer;

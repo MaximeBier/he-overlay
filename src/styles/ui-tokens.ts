@@ -33,7 +33,7 @@ export const UI_TOKENS = {
   textFaint: '#5A5F70',
   textGhost: '#4A4F60',
   /**
-   * The type scale, one step per role — and the reason it exists.
+   * The type scale, one step per role, **taken from the lot** — not guessed.
    *
    * The mockup is drawn on an 1180 px board and its figures are absolute: 9.5
    * to 12.5 px. Applied literally to a real window they read as too small,
@@ -43,10 +43,10 @@ export const UI_TOKENS = {
    * having them rather than forty literals.
    */
   sizeXs: '14px',
-  sizeSm: '15.5px',
-  sizeMd: '17px',
-  sizeLg: '19px',
-  font: "400 17px 'Archivo', system-ui, sans-serif",
+  sizeSm: '15px',
+  sizeMd: '16px',
+  sizeLg: '18px',
+  font: "400 16px 'Archivo', system-ui, sans-serif",
   fontMono: "400 15px 'IBM Plex Mono', ui-monospace, monospace",
   /**
    * Three radii, not one. The mockup gives inputs 4 px, tiles and buttons 5,
@@ -57,8 +57,8 @@ export const UI_TOKENS = {
   radiusControl: '5px',
   radiusPanel: '6px',
   space: '0.5rem',
-  headerHeight: '50px',
-  panelWidth: '300px',
+  headerHeight: '62px',
+  panelWidth: '380px',
 } as const;
 
 const CSS_PREFIX = '--he-';

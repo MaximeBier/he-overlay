@@ -827,7 +827,7 @@
     display: flex;
     flex-direction: column;
     block-size: 100vh;
-    font: var(--he-font, 400 17px system-ui, sans-serif);
+    font: var(--he-font, 400 16px system-ui, sans-serif);
     color: var(--he-text, #dde1e9);
     background: var(--he-bg, #0e1015);
   }
@@ -852,7 +852,7 @@
     align-items: center;
     gap: 7px;
     font: inherit;
-    font-size: var(--he-size-md, 17px);
+    font-size: var(--he-size-md, 16px);
     font-weight: 600;
     color: var(--he-override, #d9a05b);
     background: none;
@@ -958,7 +958,7 @@
   .link {
     all: unset;
     cursor: pointer;
-    font-size: var(--he-size-sm, 15.5px);
+    font-size: var(--he-size-sm, 15px);
     font-weight: 600;
     color: var(--he-accent, #7c9eff);
   }
@@ -1011,14 +1011,14 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    font-size: var(--he-size-sm, 15.5px);
+    font-size: var(--he-size-sm, 15px);
     color: var(--he-text-muted, #8b90a0);
     padding-block: 3px;
   }
   .field input {
     inline-size: 8rem;
     font: var(--he-font-mono, 400 15px ui-monospace, monospace);
-    font-size: var(--he-size-sm, 15.5px);
+    font-size: var(--he-size-sm, 15px);
     color: var(--he-text, #dde1e9);
     background: var(--he-stage, #0b0d11);
     border: 1px solid var(--he-border-control, #232838);
@@ -1040,7 +1040,7 @@
     gap: 8px;
     padding: 5px 9px;
     border-radius: var(--he-radius, 4px);
-    font-size: var(--he-size-md, 17px);
+    font-size: var(--he-size-md, 16px);
   }
   .keys li:hover {
     background: var(--he-surface, #151823);
@@ -1064,7 +1064,7 @@
     all: unset;
     margin-left: auto;
     cursor: pointer;
-    font-size: var(--he-size-sm, 15.5px);
+    font-size: var(--he-size-sm, 15px);
     opacity: 0;
   }
   .keys li:hover .trash,
@@ -1078,7 +1078,7 @@
 
   select {
     font: inherit;
-    font-size: var(--he-size-md, 17px);
+    font-size: var(--he-size-md, 16px);
     color: var(--he-text, #dde1e9);
     background: var(--he-stage, #0b0d11);
     border: 1px solid var(--he-border-control, #232838);

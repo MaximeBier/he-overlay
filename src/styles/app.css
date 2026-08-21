@@ -20,5 +20,5 @@ body {
   margin: 0;
   background: var(--he-bg, #0e1015);
   color: var(--he-text, #dde1e9);
-  font: var(--he-font, 400 17px system-ui, sans-serif);
+  font: var(--he-font, 400 16px system-ui, sans-serif);
 }

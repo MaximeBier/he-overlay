@@ -164,7 +164,7 @@
 
 <style>
   .body {
-    font: var(--he-font, 400 17px system-ui, sans-serif);
+    font: var(--he-font, 400 16px system-ui, sans-serif);
     color: var(--he-text-muted, #8b90a0);
   }
 
@@ -265,7 +265,7 @@
 
   button {
     font: inherit;
-    font-size: var(--he-size-sm, 15.5px);
+    font-size: var(--he-size-sm, 15px);
     font-weight: 600;
     color: var(--he-accent, #7c9eff);
     background: none;

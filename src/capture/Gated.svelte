@@ -52,7 +52,7 @@
   }
   .why {
     margin: 7px 0 0;
-    font: var(--he-font, 400 17px system-ui, sans-serif);
+    font: var(--he-font, 400 16px system-ui, sans-serif);
     font-size: var(--he-size-xs, 14px);
     text-align: center;
     color: var(--he-text-faint, #5a5f70);
@@ -61,7 +61,7 @@
     display: block;
     margin: 7px auto 0;
     font: inherit;
-    font-size: var(--he-size-sm, 15.5px);
+    font-size: var(--he-size-sm, 15px);
     font-weight: 600;
     color: var(--he-text, #dde1e9);
     background: none;

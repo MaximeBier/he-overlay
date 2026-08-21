@@ -284,8 +284,8 @@
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    font: var(--he-font, 400 17px system-ui, sans-serif);
-    font-size: var(--he-size-md, 17px);
+    font: var(--he-font, 400 16px system-ui, sans-serif);
+    font-size: var(--he-size-md, 16px);
     color: var(--he-text-muted, #8b90a0);
   }
   .trigger {
@@ -308,7 +308,7 @@
     top: 30px;
     right: 0;
     z-index: 9;
-    inline-size: 198px;
+    inline-size: 240px;
 
     display: flex;
     flex-direction: column;
@@ -332,7 +332,7 @@
     gap: 8px;
     padding: 7px 9px;
     border-radius: var(--he-radius, 4px);
-    font-size: var(--he-size-md, 17px);
+    font-size: var(--he-size-md, 16px);
     color: var(--he-text-muted, #8b90a0);
   }
   .row:hover,
@@ -382,7 +382,7 @@
     inline-size: 100%;
     box-sizing: border-box;
     font: inherit;
-    font-size: var(--he-size-md, 17px);
+    font-size: var(--he-size-md, 16px);
     color: var(--he-text, #dde1e9);
     background: var(--he-stage, #0b0d11);
     border: 1px solid var(--he-border-control, #232838);
